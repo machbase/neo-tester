@@ -66,7 +66,7 @@ func main() {
 				sqlText := queries[rand.Int31n(lenQueries)]
 				var queryElapse time.Duration
 				if strings.HasPrefix(sqlText, "/db/tql/") {
-					queryNeoTqlFile(neoHttpAddr, sqlText)
+					queryElapse = queryNeoTqlFile(neoHttpAddr, sqlText)
 				} else if useTql {
 					queryElapse = queryNeoTql(neoHttpAddr, sqlText, useCache)
 				} else {

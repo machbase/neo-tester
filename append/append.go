@@ -20,11 +20,12 @@ var scenarios = map[string]func(n, i int) string{}
 
 func init() {
 	scenarios["default"] = func(workerId, round int) string {
+		rn := 30
 		b := &bytes.Buffer{}
-		now := time.Now().UnixNano()
-		for j := 0; j < 30; j++ {
-			b.WriteString(fmt.Sprintf(`{"NAME":"work-%d","TIME":%d,"VALUE":%f}%s`,
-				workerId, now+int64(j), float64(j)/float64(round+1), "\n"))
+		var now = time.Now().UnixNano()
+		for j := 0; j < rn; j++ {
+			b.WriteString(fmt.Sprintf(`{"NAME":"work-%d-%d","TIME":%d,"VALUE":%f}%s`,
+				workerId, round%10000, now+int64(j), float64(j)/float64(round+1), "\n"))
 		}
 		b.WriteString("\n")
 		return b.String()
@@ -98,7 +99,7 @@ func appendNeoHttp(neoHttpAddr string, payload string) time.Duration {
 		os.Exit(1)
 	}
 	if rsp.StatusCode != http.StatusOK {
-		dumpResponse(rsp, "Failed to select data")
+		dumpResponse(rsp, fmt.Sprint("Failed to append data:", payload))
 		os.Exit(1)
 	}
 
