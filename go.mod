@@ -1,6 +1,6 @@
 module tester
 
-go 1.23
+go 1.23.7
 
 require (
 	github.com/machbase/neo-server/v8 v8.0.46
