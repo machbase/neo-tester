@@ -32,7 +32,7 @@ CREATE TAG TABLE IF NOT EXISTS hdcar (
 
 **장점**
 
-- CSV의 필드가 장치마다 서로 다르거나 새로운 장치의 필드들이 변경되더다로 추가적인 조치없이 입력이 가능
+- CSV의 필드가 장치마다 서로 다르거나 새로운 장치의 필드들이 변경되어도 추가적인 조치없이 입력이 가능
 - machbase-neo가 제공하는 Tag Analyzer web ui를 사용할 수 있음.
 
 **단점**
@@ -90,7 +90,7 @@ CREATE TAG TABLE IF NOT EXISTS hdcar (
 | `CN7_2023-04-06_15-57-39`  | `2023-02-02 11:29:32` | `38.44752` | `{"t":290.21346,"Latitude_Degrees":37.157759......` |
 | `CN7_2023-04-06_15-57-39`  | `2023-02-02 11:30:25` | `25.15016` | `{"t":343.05346,"Latitude_Degrees":37.159026......` |
 
-- JSON path를 이용한 조검 검색
+- JSON path를 이용한 조건 검색
 
 ```sql
 select /*+ SAMPLING(0.001) */ 
@@ -113,8 +113,8 @@ where
 
 - JSON 컬럼의 크기는 최대 32K.
 - JSON 컬럼에 저장되는 데이터가 클 수록 검색 및 데이터 자장소의 효율이 떨어질 가능성.
-- 개별 필드에 대한 조건식이 json path를 통해 가능하지만 일반 컬럼(double)에 대한 조건보다 단순하며 속도가 느림.
-- machbase-neo가 제공하는 Tag Analyzer web ui를 사용할 수 있음.
+- 개별 필드에 대한 조건식이 json path를 통해 가능하지만 일반 컬럼(double)에서 지원하는 조건보다 단순하며 속도가 느림.
+- machbase-neo가 제공하는 Tag Analyzer web ui를 사용할 수 없음.
 
 **TQL Demo**
 
