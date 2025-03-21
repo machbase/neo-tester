@@ -81,7 +81,6 @@ func main() {
 	}
 
 	csvReader := csv.NewReader(data)
-	debug := false
 
 	var headerTrimRegex = regexp.MustCompile(`\s*\[.*\]$`)
 	var headers = []string{}
@@ -122,10 +121,6 @@ func main() {
 			if v, ok := rec["WHL_SpdFLVal"]; ok {
 				value = v.(float64)
 			}
-			if debug {
-				fmt.Println(rec)
-				debug = false
-			}
 		}
 		// DATA
 		jsonData, err := json.Marshal(rec)
@@ -135,14 +130,9 @@ func main() {
 		}
 		escaped := strings.ReplaceAll(string(jsonData), `"`, `""`)
 		buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\"\n", tripId, timestamp, value, escaped)))
-		if debug {
-			jsonData, _ = json.Marshal(rec)
-			//curl -o - -H "Content-Type: text/csv" -X POST 'http://127.0.0.1:5654/db/write/HDCAR?method=insert' --data '<data>'
-			fmt.Printf("%s\n", buff.String())
-			debug = false
-		}
+
 		recordCount++
-		// send POST request every 1000 records
+		// send POST request for every 1000 records (lines)
 		if recordCount > 1000 {
 			sendHttp(serverAddr, buff)
 			recordCount = 0
@@ -170,6 +160,8 @@ func NewRecord(headers, fields []string) Record {
 	return r
 }
 
+var client = http.Client{}
+
 func sendHttp(addr string, data io.Reader) {
 	req, err := http.NewRequest("POST", addr, data)
 	if err != nil {
@@ -177,10 +169,6 @@ func sendHttp(addr string, data io.Reader) {
 		return
 	}
 	req.Header.Set("Content-Type", "text/csv")
-	client := http.Client{
-		// uncomment this line to see the request/response
-		// Transport: &loggingTransport{},
-	}
 
 	rsp, err := client.Do(req)
 	if err != nil {
