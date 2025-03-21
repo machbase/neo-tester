@@ -1,0 +1,55 @@
+SQL(` select /*+ SAMPLING(0.001) */
+        time, data
+    from
+        hdcar
+    where 
+        name = ?
+    order by time
+`, param("name") ?? "RG3_2023-01-31_17-24-30"
+)
+SCRIPT("js", {
+    time = new Date($.values[0].UnixNano()/1000000);
+    data = $.values[1];
+    obj = JSON.parse(data);
+    if (obj !== undefined){
+        lat = obj.Latitude_Degrees;
+        lon = obj.Longitude_Degrees;
+        spd = 0
+        if (obj.Speed_Kmh !== undefined) {
+            spd = obj.Speed_Kmh.toFixed(0);
+        }
+        if( obj.WHL_SPD_FL !== undefined ) {
+            whspeedFL = obj.WHL_SPD_FL.toFixed(0);
+            whspeedFR = obj.WHL_SPD_FR.toFixed(0);
+            whspeedRL = obj.WHL_SPD_RL.toFixed(0);
+            whspeedRR = obj.WHL_SPD_RR.toFixed(0);
+        } else if (obj.WHL_SpdFLVal !== undefined) {
+            whspeedFL = obj.WHL_SpdFLVal.toFixed(0);
+            whspeedFR = obj.WHL_SpdFRVal.toFixed(0);
+            whspeedRL = obj.WHL_SpdRLVal.toFixed(0);
+            whspeedRR = obj.WHL_SpdRRVal.toFixed(0);
+        }
+
+        if( lat > 0 && lon > 0) {
+            $.yield({
+                type: "circleMarker",
+                coordinates: [lat, lon],
+                properties: {
+                    radius: 5, color: "#FF0000", stroke: 0, fillOpacity: 0.6, weight: 1,
+                    tooltip: {
+                        content: 
+                            '<b>'+time+'</b><br/>'+
+                            spd+' KMH<br/>'+
+                            'wh_speed: '+whspeedRL+","+whspeedFR+","+whspeedRL+","+whspeedRR,
+                        direction: "auto"
+                    }
+                }
+            });
+        }
+    }
+})
+GEOMAP(
+    size("100%", "100%"),
+    tileGrayscale(1.0)
+)
+
