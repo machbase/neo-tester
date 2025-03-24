@@ -8,11 +8,11 @@ func init() {
 }
 
 var simpleQueries = []string{
-	`select * from tag where meta1 = 'm1-0001' limit 100`,
-	`select * from tag where meta1 = 'm1-0002' limit 100`,
-	`select * from tag where meta1 = 'm1-0003' limit 100`,
-	`select * from tag where meta1 = 'm1-0004' limit 100`,
-	`select * from tag where meta1 = 'm1-0005' limit 100`,
+	`select * from tag where meta1 = 'm1-0001' limit 1000`,
+	`select * from tag where meta1 = 'm1-0002' limit 1000`,
+	`select * from tag where meta1 = 'm1-0003' limit 1000`,
+	`select * from tag where meta1 = 'm1-0004' limit 1000`,
+	`select * from tag where meta1 = 'm1-0005' limit 1000`,
 }
 
 var multiQueries = []string{

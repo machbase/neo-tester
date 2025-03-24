@@ -19,6 +19,8 @@ import (
 
 // scenario-name -> sql-texts
 var scenarios = map[string][]string{}
+var readBuffSize = 32
+var readSleep = 1000 * time.Millisecond
 
 func init() {
 	scenarios["default"] = []string{
@@ -33,10 +35,14 @@ func main() {
 	scenario := "default"
 	useTql := false
 	useCache := false
+	buffSize := 0
+	delay := "0"
 
 	flag.StringVar(&neoHttpAddr, "neo-http", neoHttpAddr, "Neo HTTP address")
 	flag.IntVar(&numberOfWorkers, "n", numberOfWorkers, "Number of workers to use")
 	flag.IntVar(&numberOfRuns, "r", numberOfRuns, "Number of runs")
+	flag.IntVar(&buffSize, "buff", buffSize, "Buffer size for reading response body")
+	flag.StringVar(&delay, "delay", delay, "Delay for reading response body")
 	flag.StringVar(&scenario, "scenario", scenario, "Scenario to run")
 	flag.BoolVar(&useTql, "tql", useTql, "Use TQL")
 	flag.BoolVar(&useCache, "cache", useCache, "Use cache")
@@ -48,6 +54,8 @@ func main() {
 		os.Exit(1)
 	}
 
+	readBuffSize = buffSize
+	readSleep, _ = time.ParseDuration(delay)
 	runChan := make(chan time.Duration, 1000)
 	queryChan := make(chan time.Duration, 1000)
 
@@ -108,7 +116,7 @@ func queryNeoTqlFile(neoHttpAddr string, tqlFile string) time.Duration {
 		os.Exit(1)
 	}
 
-	content, err := io.ReadAll(rsp.Body)
+	content, err := ReadAll(rsp.Body, readBuffSize, readSleep)
 	if err != nil {
 		fmt.Println("Failed to read response body:", err)
 		os.Exit(1)
@@ -133,6 +141,31 @@ func queryNeoTqlFile(neoHttpAddr string, tqlFile string) time.Duration {
 	return elapse
 }
 
+func ReadAll(r io.Reader, bufSize int, delay time.Duration) ([]byte, error) {
+	if bufSize <= 0 {
+		bufSize = 512
+	}
+	b := make([]byte, 0, bufSize)
+	for {
+		n, err := r.Read(b[len(b):cap(b)])
+		b = b[:len(b)+n]
+		if err != nil {
+			if err == io.EOF {
+				err = nil
+			}
+			return b, err
+		}
+
+		if len(b) == cap(b) {
+			// Add more capacity (let append pick how much).
+			b = append(b, 0)[:len(b)]
+		}
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+	}
+}
+
 // execute the query and return the elapsed time that is said in the response JSON.
 func queryNeo(neoHttpAddr string, sqlText string) time.Duration {
 	req, err := http.NewRequest("GET", neoHttpAddr+"/db/query?q="+url.QueryEscape(sqlText), nil)
@@ -150,7 +183,7 @@ func queryNeo(neoHttpAddr string, sqlText string) time.Duration {
 		os.Exit(1)
 	}
 
-	content, err := io.ReadAll(rsp.Body)
+	content, err := ReadAll(rsp.Body, readBuffSize, readSleep)
 	if err != nil {
 		fmt.Println("Failed to read response body:", err)
 		os.Exit(1)
@@ -217,7 +250,7 @@ req:
 		os.Exit(1)
 	}
 
-	content, err := io.ReadAll(rsp.Body)
+	content, err := ReadAll(rsp.Body, readBuffSize, readSleep)
 	if err != nil {
 		fmt.Println("Failed to read response body:", err)
 		os.Exit(1)
