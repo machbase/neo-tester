@@ -1,0 +1,50 @@
+
+SQL(`select
+        time, data
+    from
+        hdcar
+    where 
+        name = ?
+    and time > ? and time < ?
+    order by time`, 
+    param("name") ?? "9CBA45F9_2023-12-28_INTERPOLATED",
+    parseTime(param("STIME") ?? '2023-12-11 12:01:25', '2006-01-02 15:04:05', tz("Local")),
+    parseTime(param("ETIME") ?? '2023-12-11 12:03:00', '2006-01-02 15:04:05', tz("Local"))
+)
+
+SCRIPT("js", {
+    obj = JSON.parse($.values[1]);
+    if (obj !== undefined){
+        $.yield(
+            $.values[0], // time
+            obj.WHL_SpdFLVal,
+            obj.WHL_SpdFRVal,
+            obj.WHL_SpdRLVal,
+            obj.WHL_SpdRRVal
+        )
+    }
+})
+
+// debug:
+// CSV(timeformat("Default"), tz("Local"))
+
+MAPVALUE(1, list(value(0), value(1))) // FL
+MAPVALUE(2, list(value(0), value(2))) // FR
+MAPVALUE(3, list(value(0), value(3))) // RL
+MAPVALUE(4, list(value(0), value(4))) // RR
+CHART(
+    size("600px", "400px"),
+    chartOption({
+        animation: false,
+        xAxis: { type: "time", axisLabel:{ rotate: -90 }},
+        yAxis: { type: "value", axisLabel:{}},
+        series: [
+            {type: "bar", data: column(1), name: "FL", stack:"whl", symbol:"none"},
+            {type: "bar", data: column(2), name: "FR", stack:"whl", symbol:"none"},
+            {type: "bar", data: column(3), name: "RL", stack:"whl", symbol:"none"},
+            {type: "bar", data: column(4), name: "RR", stack:"whl", symbol:"none"},
+        ],
+        tooltip: {trigger: "axis"},
+        legend: {}
+    })
+)

@@ -23,7 +23,7 @@ CREATE TAG TABLE IF NOT EXISTS hdcar (
 
 - TRIP: `<file_name>`
 - FIELD: `<field>`
-- NAME: `<file_name> + "."+<field>`
+- NAME: `<file_name> + "." + <field>`
 
 | NAME                                         | TIME                  | VALUE        | TRIP                      | FIELD               |
 |:---------------------------------------------|:----------------------|:-------------|---------------------------|---------------------|
@@ -152,6 +152,7 @@ go run post.go -can -in ./tmp/data2/interpolated/9CBA45F9_2023-12-31_interpolate
 ## 데이터 입력 후 해당 파일의 trajectory를 시각화하는 예.
 
 - [trajectory.tql](./hdcar-trajectory.tql)
+- [chart.tql](./hdcar-chart.tql)
 - [trip-list.html](./hdcar-list.html)
 
 ## CSV References
