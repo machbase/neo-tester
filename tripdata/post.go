@@ -129,7 +129,8 @@ func main() {
 			return
 		}
 		escaped := strings.ReplaceAll(string(jsonData), `"`, `""`)
-		buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\"\n", tripId, timestamp, value, escaped)))
+		//buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\"\n", tripId, timestamp, value, escaped)))
+		buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\",\"\",\"\",\"\",\"\",\"\",\"\",0,0,0\n", tripId, timestamp, value, escaped)))
 
 		recordCount++
 		// send POST request for every 1000 records (lines)
