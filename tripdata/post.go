@@ -20,9 +20,11 @@ func main() {
 	serverAddr := "http://127.0.0.1:5654/db/write/hdcar?method=append"
 	isCanData := false
 	inputFile := ""
+	offset := 0
 	flag.StringVar(&serverAddr, "server", serverAddr, "Server address")
 	flag.StringVar(&inputFile, "in", inputFile, "Input file")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
+	flag.IntVar(&offset, "offset", offset, "Input file offset")
 	flag.Parse()
 
 	if len(os.Args) < 2 {
@@ -36,6 +38,17 @@ func main() {
 		return
 	}
 	defer data.Close()
+
+	// Data File Line Offset
+	for offset > 0 {
+		var char [1]byte
+		if n, err := data.Read(char[:]); err != nil || n == 0 {
+			return // EOF
+		}
+		if char[0] == '\n' {
+			offset--
+		}
+	}
 
 	// Decide the trip ID from the file name
 	var tripId = strings.TrimSuffix(strings.ToUpper(filepath.Base(inputFile)), ".CSV")
@@ -122,6 +135,7 @@ func main() {
 				value = v.(float64)
 			}
 		}
+
 		// DATA
 		jsonData, err := json.Marshal(rec)
 		if err != nil {
