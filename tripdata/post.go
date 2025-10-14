@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
@@ -20,17 +21,20 @@ func main() {
 	serverAddr := "http://127.0.0.1:5654/db/write/hdcar?method=append"
 	isCanData := false
 	inputFile := ""
+	atStartTime := 1
 	offset := 0
 	flag.StringVar(&serverAddr, "server", serverAddr, "Server address")
 	flag.StringVar(&inputFile, "in", inputFile, "Input file")
+	flag.IntVar(&offset, "offset", offset, "Input file line offset")
+	flag.IntVar(&atStartTime, "start-time", atStartTime, "Trip start time line number, if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
-	flag.IntVar(&offset, "offset", offset, "Input file offset")
 	flag.Parse()
 
 	if len(os.Args) < 2 {
 		flag.Usage()
 		return
 	}
+
 	fmt.Println("Reading file", inputFile)
 	data, err := os.Open(inputFile)
 	if err != nil {
@@ -39,68 +43,56 @@ func main() {
 	}
 	defer data.Close()
 
-	// Data File Line Offset
-	for offset > 0 {
-		var char [1]byte
-		if n, err := data.Read(char[:]); err != nil || n == 0 {
+	// Decide the trip ID from the file name
+	var tripId = strings.TrimSuffix(strings.ToUpper(filepath.Base(inputFile)), ".CSV")
+	fmt.Printf("ID: %s\n", tripId)
+
+	// Skip to the offset line
+	var tripStartTime time.Time
+	reader := bufio.NewReader(data)
+	for i := 0; i < offset; i++ {
+		str, err := reader.ReadString('\n')
+		if err != nil {
 			return // EOF
-		}
-		if char[0] == '\n' {
+		} else {
+			if !isCanData && i == atStartTime-1 {
+				// read the first line which contains the trip start time
+				// ex) Date:06.04.2023 Time:06:57:39
+
+				// parse start time
+				var startTimeRegex = regexp.MustCompile(`Date:(\d{2})\.(\d{2})\.(\d{4}) Time:(\d{2}):(\d{2}):(\d{2})`)
+				if match := startTimeRegex.FindStringSubmatch(str); match != nil {
+					day, _ := strconv.ParseInt(match[1], 10, 32)
+					month, _ := strconv.ParseInt(match[2], 10, 32)
+					year, _ := strconv.ParseInt(match[3], 10, 32)
+					hours, _ := strconv.ParseInt(match[4], 10, 32)
+					minutes, _ := strconv.ParseInt(match[5], 10, 32)
+					seconds, _ := strconv.ParseInt(match[6], 10, 32)
+
+					tripStartTime = time.Date(int(year), time.Month(month), int(day), int(hours), int(minutes), int(seconds), 0, time.Local)
+					fmt.Printf("start time: %s\n\n", tripStartTime)
+				} else {
+					fmt.Println("No Date line, it might be CAN data")
+					return
+				}
+			}
+
 			offset--
 		}
 	}
 
-	// Decide the trip ID from the file name
-	var tripId = strings.TrimSuffix(strings.ToUpper(filepath.Base(inputFile)), ".CSV")
-	var tripStartTime time.Time
-
-	buff := &bytes.Buffer{}
-	if !isCanData {
-		// read the first line which contains the trip start time
-		// ex) Date:06.04.2023 Time:06:57:39
-		for {
-			var char [1]byte
-			if n, err := data.Read(char[:]); err != nil || n == 0 {
-				return // EOF
-			}
-			if char[0] == '\n' {
-				break
-			} else {
-				buff.WriteByte(char[0])
-			}
-		}
-		// fmt.Println("The first line:", buff.String())
-
-		// parse start time
-		var startTimeRegex = regexp.MustCompile(`Date:(\d{2})\.(\d{2})\.(\d{4}) Time:(\d{2}):(\d{2}):(\d{2})`)
-		if match := startTimeRegex.FindStringSubmatch(buff.String()); match != nil {
-			day, _ := strconv.ParseInt(match[1], 10, 32)
-			month, _ := strconv.ParseInt(match[2], 10, 32)
-			year, _ := strconv.ParseInt(match[3], 10, 32)
-			hours, _ := strconv.ParseInt(match[4], 10, 32)
-			minutes, _ := strconv.ParseInt(match[5], 10, 32)
-			seconds, _ := strconv.ParseInt(match[6], 10, 32)
-
-			tripStartTime = time.Date(int(year), time.Month(month), int(day), int(hours), int(minutes), int(seconds), 0, time.Local)
-			fmt.Printf("ID: %s\n", tripId)
-			fmt.Printf("start time: %s\n\n", tripStartTime)
-		} else {
-			fmt.Println("No Date line, it might be CAN data")
-			return
-		}
-		buff.Reset()
-	} else {
-		fmt.Printf("ID: %s\n", tripId)
-	}
-
-	csvReader := csv.NewReader(data)
-
+	// parse header line
 	var headerTrimRegex = regexp.MustCompile(`\s*\[.*\]$`)
 	var headers = []string{}
 	var headerIndex = map[string]int{}
 
-	// parse header line
+	csvReader := csv.NewReader(reader)
 	fields, err := csvReader.Read()
+	if err != nil {
+		fmt.Println("Error reading header", err)
+		return
+	}
+
 	for idx, h := range fields {
 		if h == "" { // all lines contains an empty field at the end
 			continue
@@ -110,8 +102,9 @@ func main() {
 		headerIndex[name] = idx
 	}
 
-	recordCount := 0
 	// parse body lines
+	recordCount := 0
+	buff := &bytes.Buffer{}
 	for {
 		fields, err := csvReader.Read()
 		if err != nil {
@@ -144,7 +137,7 @@ func main() {
 		}
 		escaped := strings.ReplaceAll(string(jsonData), `"`, `""`)
 		//buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\"\n", tripId, timestamp, value, escaped)))
-		buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\",\"\",\"\",\"\",\"\",\"\",\"\",0,0,0\n", tripId, timestamp, value, escaped)))
+		buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\",\"\",\"\",\"\",\"\",\"\",\"\",0,0,0,0\n", tripId, timestamp, value, escaped)))
 
 		recordCount++
 		// send POST request for every 1000 records (lines)
@@ -155,6 +148,7 @@ func main() {
 			fmt.Print(".")
 		}
 	}
+
 	if buff.Len() > 0 {
 		sendHttp(serverAddr, buff)
 	}
