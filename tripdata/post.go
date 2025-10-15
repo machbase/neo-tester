@@ -21,14 +21,14 @@ func main() {
 	serverAddr := "http://127.0.0.1:5654/db/write/hdcar?method=append"
 	isCanData := false
 	inputFile := ""
-	atStartTime := 1
+	startTime := "2006-01-02 15:04:05"
 	offset := 0
 	timeForamt := "ns" // s(unix), ms(unix), us(unix), ns(unix)
 
 	flag.StringVar(&serverAddr, "server", serverAddr, "Server address")
 	flag.StringVar(&inputFile, "in", inputFile, "Input file")
 	flag.IntVar(&offset, "offset", offset, "Input file line offset")
-	flag.IntVar(&atStartTime, "start-time", atStartTime, "Trip start time line number, if not CAN data")
+	flag.StringVar(&startTime, "start-time", startTime, "Trip start time line number, if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
 	flag.StringVar(&timeForamt, "ts", timeForamt, "timestamp format, if CAN data, format: n, ms, us, ns")
 	flag.Parse()
@@ -51,37 +51,26 @@ func main() {
 	fmt.Printf("ID: %s\n", tripId)
 
 	// Skip to the offset line
-	var tripStartTime time.Time
 	reader := bufio.NewReader(data)
 	for i := 0; i < offset; i++ {
-		str, err := reader.ReadString('\n')
+		_, err := reader.ReadBytes('\n')
 		if err != nil {
 			return // EOF
 		} else {
-			if !isCanData && i == atStartTime-1 {
-				// read the first line which contains the trip start time
-				// ex) Date:06.04.2023 Time:06:57:39
-
-				// parse start time
-				var startTimeRegex = regexp.MustCompile(`Date:(\d{2})\.(\d{2})\.(\d{4}) Time:(\d{2}):(\d{2}):(\d{2})`)
-				if match := startTimeRegex.FindStringSubmatch(str); match != nil {
-					day, _ := strconv.ParseInt(match[1], 10, 32)
-					month, _ := strconv.ParseInt(match[2], 10, 32)
-					year, _ := strconv.ParseInt(match[3], 10, 32)
-					hours, _ := strconv.ParseInt(match[4], 10, 32)
-					minutes, _ := strconv.ParseInt(match[5], 10, 32)
-					seconds, _ := strconv.ParseInt(match[6], 10, 32)
-
-					tripStartTime = time.Date(int(year), time.Month(month), int(day), int(hours), int(minutes), int(seconds), 0, time.Local)
-					fmt.Printf("start time: %s\n\n", tripStartTime)
-				} else {
-					fmt.Println("No Date line, it might be CAN data")
-					return
-				}
-			}
-
 			offset--
 		}
+	}
+
+	// parse start time
+	var tripStartTime time.Time
+	if !isCanData {
+		tripStartTime, err = time.Parse("2006-01-02 15:04:05", startTime)
+		if err != nil {
+			fmt.Println("Error parsing start time", err)
+			return
+		}
+
+		fmt.Printf("start time: %s\n\n", tripStartTime)
 	}
 
 	// parse header line
