@@ -22,6 +22,7 @@ func main() {
 	isCanData := false
 	inputFile := ""
 	startTime := "2006-01-02 15:04:05"
+	timeColName := "t"
 	offset := 0
 	timeForamt := "ns" // s(unix), ms(unix), us(unix), ns(unix)
 
@@ -31,6 +32,7 @@ func main() {
 	flag.StringVar(&startTime, "start-time", startTime, "Trip start time line number, if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
 	flag.StringVar(&timeForamt, "ts", timeForamt, "timestamp format, if CAN data, format: n, ms, us, ns")
+	flag.StringVar(&timeColName, "time-col", timeColName, "timestamp column name (t, timestamps)")
 	flag.Parse()
 
 	if len(os.Args) < 2 {
@@ -107,14 +109,14 @@ func main() {
 		var value = 0.0
 		if !isCanData { // CN7, RG3
 			// TIME
-			timestamp = tripStartTime.UnixNano() + int64(rec["t"].(float64)*1000000000)
+			timestamp = tripStartTime.UnixNano() + int64(rec[timeColName].(float64)*1000000000) // "t"
 			// VALUE
 			if v, ok := rec["Speed_Kmh"]; ok {
 				value = v.(float64)
 			}
 		} else { // CAN - raw & interpolated
 			// TIME
-			timestamp = int64(rec["timestamps"].(float64))
+			timestamp = int64(rec[timeColName].(float64)) // "timestamps"
 			switch timeForamt {
 			case "s":
 				timestamp = timestamp * 1_000_000_000
