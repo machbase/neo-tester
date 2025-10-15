@@ -23,11 +23,14 @@ func main() {
 	inputFile := ""
 	atStartTime := 1
 	offset := 0
+	timeForamt := "ns" // s(unix), ms(unix), us(unix), ns(unix)
+
 	flag.StringVar(&serverAddr, "server", serverAddr, "Server address")
 	flag.StringVar(&inputFile, "in", inputFile, "Input file")
 	flag.IntVar(&offset, "offset", offset, "Input file line offset")
 	flag.IntVar(&atStartTime, "start-time", atStartTime, "Trip start time line number, if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
+	flag.StringVar(&timeForamt, "ts", timeForamt, "timestamp format, if CAN data, format: n, ms, us, ns")
 	flag.Parse()
 
 	if len(os.Args) < 2 {
@@ -122,7 +125,16 @@ func main() {
 			}
 		} else { // CAN - raw & interpolated
 			// TIME
-			timestamp = int64(rec["timestamps"].(float64)) * 1000000
+			timestamp = int64(rec["timestamps"].(float64))
+			switch timeForamt {
+			case "s":
+				timestamp = timestamp * 1_000_000_000
+			case "ms":
+				timestamp = timestamp * 1_000_000
+			case "us":
+				timestamp = timestamp * 1_000
+			}
+
 			// VALUE
 			if v, ok := rec["WHL_SpdFLVal"]; ok {
 				value = v.(float64)
