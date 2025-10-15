@@ -24,14 +24,14 @@ func main() {
 	startTime := "2006-01-02 15:04:05"
 	timeColName := "t"
 	offset := 0
-	timeForamt := "ns" // s(unix), ms(unix), us(unix), ns(unix)
+	timeFormat := "ns"
 
 	flag.StringVar(&serverAddr, "server", serverAddr, "Server address")
 	flag.StringVar(&inputFile, "in", inputFile, "Input file")
 	flag.IntVar(&offset, "offset", offset, "Input file line offset")
-	flag.StringVar(&startTime, "start-time", startTime, "Trip start time line number, if not CAN data")
+	flag.StringVar(&startTime, "start-time", startTime, "Trip start time (format: 2006-01-02 15:04:05), if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
-	flag.StringVar(&timeForamt, "ts", timeForamt, "timestamp format, if CAN data, format: n, ms, us, ns")
+	flag.StringVar(&timeFormat, "ts", timeFormat, "timestamp format, if CAN data, format: s, ms, us, ns")
 	flag.StringVar(&timeColName, "time-col", timeColName, "timestamp column name (t, timestamps)")
 	flag.Parse()
 
@@ -117,7 +117,7 @@ func main() {
 		} else { // CAN - raw & interpolated
 			// TIME
 			timestamp = int64(rec[timeColName].(float64)) // "timestamps"
-			switch timeForamt {
+			switch timeFormat {
 			case "s":
 				timestamp = timestamp * 1_000_000_000
 			case "ms":
