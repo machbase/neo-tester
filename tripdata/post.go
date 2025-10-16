@@ -120,9 +120,9 @@ func main() {
 			switch timeFormat {
 			case "s":
 				timestamp = timestamp * 1_000_000_000
-			case "ms":
-				timestamp = timestamp * 1_000_000
 			case "us":
+				timestamp = timestamp * 1_000_000
+			case "ms":
 				timestamp = timestamp * 1_000
 			}
 
