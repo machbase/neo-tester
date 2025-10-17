@@ -25,6 +25,8 @@ func main() {
 	timeColName := "t"
 	offset := 0
 	timeFormat := "ns"
+	headerLines := 1
+	headerCombine := false
 
 	flag.StringVar(&serverAddr, "server", serverAddr, "Server address")
 	flag.StringVar(&inputFile, "in", inputFile, "Input file")
@@ -33,6 +35,8 @@ func main() {
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
 	flag.StringVar(&timeFormat, "ts", timeFormat, "timestamp format, if CAN data, format: s, ms, us, ns")
 	flag.StringVar(&timeColName, "time-col", timeColName, "timestamp column name (t, timestamps)")
+	flag.IntVar(&headerLines, "header", headerLines, "Number of header lines to read")
+	flag.BoolVar(&headerCombine, "header-combine", headerCombine, "Combine all header lines with '_' (default: use first line only)")
 	flag.Parse()
 
 	if len(os.Args) < 2 {
@@ -75,25 +79,36 @@ func main() {
 		fmt.Printf("start time: %s\n\n", tripStartTime)
 	}
 
-	// parse header line
+	// parse header line(s)
+	csvReader := csv.NewReader(reader)
 	var headerTrimRegex = regexp.MustCompile(`\s*\[.*\]$`)
 	var headers = []string{}
-	var headerIndex = map[string]int{}
-
-	csvReader := csv.NewReader(reader)
+	for i := range headerLines {
 	fields, err := csvReader.Read()
 	if err != nil {
-		fmt.Println("Error reading header", err)
+			fmt.Println("Error reading header line", i+1, err)
 		return
 	}
 
+		if i == 0 {
+			headers = make([]string, len(fields))
+		} else if !headerCombine {
+			break
+		}
+
 	for idx, h := range fields {
+			h = strings.TrimSpace(h)
 		if h == "" { // all lines contains an empty field at the end
 			continue
 		}
+
 		name := headerTrimRegex.ReplaceAllString(h, "")
-		headers = append(headers, name)
-		headerIndex[name] = idx
+			if i == 0 {
+				headers[idx] = name
+			} else {
+				headers[idx] = fmt.Sprintf("%s_%s", headers[idx], name)
+			}
+		}
 	}
 
 	// parse body lines
