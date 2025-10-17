@@ -141,12 +141,12 @@ go run post.go -in ./tmp/data1/CN7_2023-04-07_12-06-28.CSV
 go run post.go -in ./tmp/data1/RG3_2023-01-31_17-24-30.CSV
 go run post.go -in ./tmp/data1/RG3_2023-02-02_06-04-00.CSV
 go run post.go -in ./tmp/data1/RG3_2023-02-02_20-27-07.CSV
-go run post.go -can -in ./tmp/data2/raw/9CBA45F9_2023-12-28.csv
-go run post.go -can -in ./tmp/data2/raw/9CBA45F9_2023-12-29.csv
-go run post.go -can -in ./tmp/data2/raw/9CBA45F9_2023-12-31.csv
-go run post.go -can -in ./tmp/data2/interpolated/9CBA45F9_2023-12-28_interpolated.csv
-go run post.go -can -in ./tmp/data2/interpolated/9CBA45F9_2023-12-29_interpolated.csv
-go run post.go -can -in ./tmp/data2/interpolated/9CBA45F9_2023-12-31_interpolated.csv
+go run post.go -can -time-unit ms -in ./tmp/data2/raw/9CBA45F9_2023-12-28.csv
+go run post.go -can -time-unit ms -in ./tmp/data2/raw/9CBA45F9_2023-12-29.csv
+go run post.go -can -time-unit ms -in ./tmp/data2/raw/9CBA45F9_2023-12-31.csv
+go run post.go -can -time-unit ms -in ./tmp/data2/interpolated/9CBA45F9_2023-12-28_interpolated.csv
+go run post.go -can -time-unit ms -in ./tmp/data2/interpolated/9CBA45F9_2023-12-29_interpolated.csv
+go run post.go -can -time-unit ms -in ./tmp/data2/interpolated/9CBA45F9_2023-12-31_interpolated.csv
 ```
 
 ## 데이터 입력 후 해당 파일의 trajectory를 시각화하는 예.
