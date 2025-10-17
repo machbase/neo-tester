@@ -24,7 +24,7 @@ func main() {
 	startTime := "2006-01-02 15:04:05"
 	timeColName := "t"
 	offset := 0
-	timeFormat := "ns"
+	timeUnit := "ns"
 	headerLines := 1
 	headerCombine := false
 
@@ -33,7 +33,7 @@ func main() {
 	flag.IntVar(&offset, "offset", offset, "Input file line offset")
 	flag.StringVar(&startTime, "start-time", startTime, "Trip start time (format: 2006-01-02 15:04:05), if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
-	flag.StringVar(&timeFormat, "ts", timeFormat, "timestamp format, if CAN data, format: s, ms, us, ns")
+	flag.StringVar(&timeUnit, "time-unit", timeUnit, "Timestamp unit for CAN data: s, ms, us, ns")
 	flag.StringVar(&timeColName, "time-col", timeColName, "timestamp column name (t, timestamps)")
 	flag.IntVar(&headerLines, "header", headerLines, "Number of header lines to read")
 	flag.BoolVar(&headerCombine, "header-combine", headerCombine, "Combine all header lines with '_' (default: use first line only)")
@@ -84,11 +84,11 @@ func main() {
 	var headerTrimRegex = regexp.MustCompile(`\s*\[.*\]$`)
 	var headers = []string{}
 	for i := range headerLines {
-	fields, err := csvReader.Read()
-	if err != nil {
+		fields, err := csvReader.Read()
+		if err != nil {
 			fmt.Println("Error reading header line", i+1, err)
-		return
-	}
+			return
+		}
 
 		if i == 0 {
 			headers = make([]string, len(fields))
@@ -96,13 +96,13 @@ func main() {
 			break
 		}
 
-	for idx, h := range fields {
+		for idx, h := range fields {
 			h = strings.TrimSpace(h)
-		if h == "" { // all lines contains an empty field at the end
-			continue
-		}
+			if h == "" { // all lines contains an empty field at the end
+				continue
+			}
 
-		name := headerTrimRegex.ReplaceAllString(h, "")
+			name := headerTrimRegex.ReplaceAllString(h, "")
 			if i == 0 {
 				headers[idx] = name
 			} else {
@@ -132,7 +132,7 @@ func main() {
 		} else { // CAN - raw & interpolated
 			// TIME
 			timestamp = int64(rec[timeColName].(float64)) // "timestamps"
-			switch timeFormat {
+			switch timeUnit {
 			case "s":
 				timestamp = timestamp * 1_000_000_000
 			case "us":
