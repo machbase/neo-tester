@@ -33,7 +33,7 @@ func main() {
 	flag.IntVar(&offset, "offset", offset, "Input file line offset")
 	flag.StringVar(&startTime, "start-time", startTime, "Trip start time (format: 2025-10-25 10:00:00), if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
-	flag.StringVar(&timeUnit, "time-unit", timeUnit, "Timestamp unit for CAN data: s, ms, us, ns")
+	flag.StringVar(&timeUnit, "time-unit", timeUnit, "Timestamp unit for CAN data: s|ms|us|ns (numeric) or date|time|datetime|datetime_ms|datetime_us|datetime_ns (string)")
 	flag.StringVar(&timeColName, "time-col", timeColName, "timestamp column name (t, timestamps)")
 	flag.IntVar(&headerLines, "header", headerLines, "Number of header lines to read")
 	flag.BoolVar(&headerCombine, "header-combine", headerCombine, "Combine all header lines with '_' (default: use first line only)")
@@ -68,7 +68,7 @@ func main() {
 	// parse start time
 	var tripStartTime time.Time
 	if !isCanData {
-		tripStartTime, err = time.ParseInLocation("2006-01-02 15:04:05", startTime, time.Local)
+		tripStartTime, err = time.ParseInLocation(time.DateTime, startTime, time.Local)
 		if err != nil {
 			fmt.Println("Error parsing start time", err)
 			return
@@ -120,6 +120,7 @@ func main() {
 	for {
 		fields, err := csvReader.Read()
 		if err != nil {
+			fmt.Println("Error read csv", err)
 			break
 		}
 		rec := NewRecord(headers, fields)
@@ -134,14 +135,17 @@ func main() {
 			}
 		} else { // CAN - raw & interpolated
 			// TIME
-			timestamp = int64(rec[timeColName].(float64)) // "timestamps"
-			switch timeUnit {
-			case "s":
-				timestamp = timestamp * 1_000_000_000
-			case "us":
-				timestamp = timestamp * 1_000_000
-			case "ms":
-				timestamp = timestamp * 1_000
+			if to, ok := timeUnitMap[timeUnit]; ok {
+				v, err := to(rec[timeColName])
+				if err != nil {
+					fmt.Println("Error parse timestamp", err)
+					return
+				}
+
+				timestamp = v
+			} else {
+				fmt.Printf("not supported time unit %s\n", timeUnit)
+				return
 			}
 
 			// VALUE
@@ -183,8 +187,13 @@ func NewRecord(headers, fields []string) Record {
 		if h == "" { // all lines contains empty string at the end
 			continue
 		}
+
 		if v := fields[idx]; len(v) > 0 {
-			r[h], _ = strconv.ParseFloat(v, 64)
+			if fv, err := strconv.ParseFloat(v, 64); err == nil {
+				r[h] = fv
+			} else {
+				r[h] = v
+			}
 		}
 	}
 	return r
@@ -206,4 +215,137 @@ func sendHttp(addr string, data io.Reader) {
 		return
 	}
 	defer rsp.Body.Close()
+}
+
+var timeUnitMap map[string]func(any) (int64, error) = map[string]func(any) (int64, error){
+	"s":           UnixSecToTimestamp,
+	"ms":          UnixMilliToTimestamp,
+	"us":          UnixMicroToTimestamp,
+	"ns":          UnixNanoToTimestamp,
+	"date":        DateToTimestamp,
+	"time":        TimeToTimestamp,
+	"datetime":    DateTimeToTimestamp,
+	"datetime_ms": DateTimeMilliToTimestamp,
+	"datetime_us": DateTimeMicroToTimestamp,
+	"datetime_ns": DateTimeNanoToTimestamp,
+}
+
+func UnixSecToTimestamp(v any) (int64, error) {
+	f, ok := v.(float64)
+	if !ok {
+		return 0, fmt.Errorf("expected float64, got %T", v)
+	}
+
+	return int64(f * 1_000_000_000), nil
+}
+
+func UnixMilliToTimestamp(v any) (int64, error) {
+	f, ok := v.(float64)
+	if !ok {
+		return 0, fmt.Errorf("expected float64, got %T", v)
+	}
+
+	return int64(f * 1_000_000), nil
+}
+
+func UnixMicroToTimestamp(v any) (int64, error) {
+	f, ok := v.(float64)
+	if !ok {
+		return 0, fmt.Errorf("expected float64, got %T", v)
+	}
+
+	return int64(f * 1_000), nil
+}
+
+func UnixNanoToTimestamp(v any) (int64, error) {
+	f, ok := v.(float64)
+	if !ok {
+		return 0, fmt.Errorf("expected float64, got %T", v)
+	}
+
+	return int64(f), nil
+}
+
+func DateToTimestamp(v any) (int64, error) {
+	s, ok := v.(string)
+	if !ok {
+		return 0, fmt.Errorf("expected string, got %T", v)
+	}
+
+	t, err := time.ParseInLocation(time.DateOnly, s, time.Local)
+	if err != nil {
+		return 0, err
+	}
+
+	return t.UnixNano(), nil
+}
+
+func TimeToTimestamp(v any) (int64, error) {
+	s, ok := v.(string)
+	if !ok {
+		return 0, fmt.Errorf("expected string, got %T", v)
+	}
+
+	t, err := time.ParseInLocation(time.TimeOnly, s, time.Local)
+	if err != nil {
+		return 0, err
+	}
+
+	return t.UnixNano(), nil
+}
+
+func DateTimeToTimestamp(v any) (int64, error) {
+	s, ok := v.(string)
+	if !ok {
+		return 0, fmt.Errorf("expected string, got %T", v)
+	}
+
+	t, err := time.ParseInLocation(time.DateTime, s, time.Local)
+	if err != nil {
+		return 0, err
+	}
+
+	return t.UnixNano(), nil
+}
+
+func DateTimeMilliToTimestamp(v any) (int64, error) {
+	s, ok := v.(string)
+	if !ok {
+		return 0, fmt.Errorf("expected string, got %T", v)
+	}
+
+	t, err := time.ParseInLocation("2006-01-02 15:04:05.000", s, time.Local)
+	if err != nil {
+		return 0, err
+	}
+
+	return t.UnixNano(), nil
+}
+
+func DateTimeMicroToTimestamp(v any) (int64, error) {
+	s, ok := v.(string)
+	if !ok {
+		return 0, fmt.Errorf("expected string, got %T", v)
+	}
+
+	t, err := time.ParseInLocation("2006-01-02 15:04:05.000000", s, time.Local)
+	if err != nil {
+		return 0, err
+	}
+
+	return t.UnixNano(), nil
+}
+
+func DateTimeNanoToTimestamp(v any) (int64, error) {
+	s, ok := v.(string)
+	if !ok {
+		return 0, fmt.Errorf("expected string, got %T", v)
+	}
+
+	t, err := time.ParseInLocation("2006-01-02 15:04:05.000000000", s, time.Local)
+	if err != nil {
+		return 0, err
+	}
+
+	return t.UnixNano(), nil
 }
