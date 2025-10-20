@@ -68,7 +68,7 @@ func main() {
 	// parse start time
 	var tripStartTime time.Time
 	if !isCanData {
-		tripStartTime, err = time.Parse("2006-01-02 15:04:05", startTime)
+		tripStartTime, err = time.ParseInLocation("2006-01-02 15:04:05", startTime, time.Local)
 		if err != nil {
 			fmt.Println("Error parsing start time", err)
 			return
