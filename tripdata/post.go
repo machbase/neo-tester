@@ -58,12 +58,10 @@ func main() {
 
 	// Skip to the offset line
 	reader := bufio.NewReader(data)
-	for i := 0; i < offset; i++ {
+	for range offset {
 		_, err := reader.ReadBytes('\n')
 		if err != nil {
 			return // EOF
-		} else {
-			offset--
 		}
 	}
 
