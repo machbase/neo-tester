@@ -21,17 +21,17 @@ func main() {
 	serverAddr := "http://127.0.0.1:5654/db/write/hdcar?method=append"
 	isCanData := false
 	inputFile := ""
-	startTime := "2006-01-02 15:04:05"
-	timeColName := "t"
 	offset := 0
-	timeUnit := "ns"
+	startTime := "2025-10-25 10:00:00"
+	timeColName := ""
+	timeUnit := "ms"
 	headerLines := 1
 	headerCombine := false
 
 	flag.StringVar(&serverAddr, "server", serverAddr, "Server address")
 	flag.StringVar(&inputFile, "in", inputFile, "Input file")
 	flag.IntVar(&offset, "offset", offset, "Input file line offset")
-	flag.StringVar(&startTime, "start-time", startTime, "Trip start time (format: 2006-01-02 15:04:05), if not CAN data")
+	flag.StringVar(&startTime, "start-time", startTime, "Trip start time (format: 2025-10-25 10:00:00), if not CAN data")
 	flag.BoolVar(&isCanData, "can", isCanData, "CAN data")
 	flag.StringVar(&timeUnit, "time-unit", timeUnit, "Timestamp unit for CAN data: s, ms, us, ns")
 	flag.StringVar(&timeColName, "time-col", timeColName, "timestamp column name (t, timestamps)")
