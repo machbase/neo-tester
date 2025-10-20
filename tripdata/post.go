@@ -109,6 +109,11 @@ func main() {
 		}
 	}
 
+	// time-col
+	if strings.TrimSpace(timeColName) == "" {
+		timeColName = headers[0]
+	}
+
 	// parse body lines
 	recordCount := 0
 	buff := &bytes.Buffer{}
