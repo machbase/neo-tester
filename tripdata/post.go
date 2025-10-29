@@ -41,14 +41,13 @@ func main() {
 
 	if len(os.Args) < 2 {
 		flag.Usage()
-		return
+		panic("There is a lack of args.")
 	}
 
 	fmt.Println("Reading file", inputFile)
 	data, err := os.Open(inputFile)
 	if err != nil {
-		fmt.Println("Error reading file", err)
-		return
+		panic(fmt.Sprintln("Error reading file", err))
 	}
 	defer data.Close()
 
@@ -60,8 +59,8 @@ func main() {
 	reader := bufio.NewReader(data)
 	for range offset {
 		_, err := reader.ReadBytes('\n')
-		if err != nil {
-			return // EOF
+		if err != nil { // EOF
+			panic(fmt.Sprintln("during line skip", err))
 		}
 	}
 
@@ -70,8 +69,7 @@ func main() {
 	if !isCanData {
 		tripStartTime, err = time.ParseInLocation(time.DateTime, startTime, time.Local)
 		if err != nil {
-			fmt.Println("Error parsing start time", err)
-			return
+			panic(fmt.Sprintln("invalid start time", err))
 		}
 
 		fmt.Printf("start time: %s\n\n", tripStartTime)
@@ -84,8 +82,7 @@ func main() {
 	for i := range headerLines {
 		fields, err := csvReader.Read()
 		if err != nil {
-			fmt.Println("Error reading header line", i+1, err)
-			return
+			panic(fmt.Sprintln("reading header line", i+1, err))
 		}
 
 		if i == 0 {
@@ -138,14 +135,12 @@ func main() {
 			if to, ok := timeUnitMap[timeUnit]; ok {
 				v, err := to(rec[timeColName])
 				if err != nil {
-					fmt.Println("Error parse timestamp", err)
-					return
+					panic(fmt.Sprintln("parse timestamp", err))
 				}
 
 				timestamp = v
 			} else {
-				fmt.Printf("not supported time unit %s\n", timeUnit)
-				return
+				panic(fmt.Sprintln("invalid time unit", timeUnit))
 			}
 
 			// VALUE
@@ -157,8 +152,7 @@ func main() {
 		// DATA
 		jsonData, err := json.Marshal(rec)
 		if err != nil {
-			fmt.Println("Error marshalling record", err)
-			return
+			panic(fmt.Sprintln("marshalling record", err))
 		}
 		escaped := strings.ReplaceAll(string(jsonData), `"`, `""`)
 		//buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\"\n", tripId, timestamp, value, escaped)))
@@ -167,7 +161,10 @@ func main() {
 		recordCount++
 		// send POST request for every 1000 records (lines)
 		if recordCount > 1000 {
-			sendHttp(serverAddr, buff)
+			if err := sendHttp(serverAddr, buff); err != nil {
+				panic(err)
+			}
+
 			recordCount = 0
 			buff.Reset()
 			fmt.Print(".")
@@ -175,7 +172,9 @@ func main() {
 	}
 
 	if buff.Len() > 0 {
-		sendHttp(serverAddr, buff)
+		if err := sendHttp(serverAddr, buff); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -201,20 +200,22 @@ func NewRecord(headers, fields []string) Record {
 
 var client = http.Client{}
 
-func sendHttp(addr string, data io.Reader) {
+func sendHttp(addr string, data io.Reader) error {
 	req, err := http.NewRequest("POST", addr, data)
 	if err != nil {
 		fmt.Println("Error creating request", err)
-		return
+		return err
 	}
 	req.Header.Set("Content-Type", "text/csv")
 
 	rsp, err := client.Do(req)
 	if err != nil {
 		fmt.Println("Error sending request", err)
-		return
+		return err
 	}
+
 	defer rsp.Body.Close()
+	return nil
 }
 
 var timeUnitMap map[string]func(any) (int64, error) = map[string]func(any) (int64, error){
