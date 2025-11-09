@@ -193,6 +193,8 @@ func NewRecord(headers, fields []string) Record {
 			} else {
 				r[h] = v
 			}
+		} else {
+			r[h] = float64(0)
 		}
 	}
 	return r
