@@ -120,6 +120,7 @@ func main() {
 			fmt.Println("Error read csv", err)
 			break
 		}
+		raw := strings.Join(fields, ",")
 		rec := NewRecord(headers, fields)
 		var timestamp int64
 		var value = 0.0
@@ -156,7 +157,7 @@ func main() {
 		}
 		escaped := strings.ReplaceAll(string(jsonData), `"`, `""`)
 		//buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\"\n", tripId, timestamp, value, escaped)))
-		buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\",\"\",\"\",\"\",\"\",\"\",\"\",0,0,0,0\n", tripId, timestamp, value, escaped)))
+		buff.Write([]byte(fmt.Sprintf("%s,%d,%f,\"%s\",\"%s\",\"\",\"\",\"\",\"\",\"\",\"\",0,0,0,0,\"\"\n", tripId, timestamp, value, escaped, raw)))
 
 		recordCount++
 		// send POST request for every 1000 records (lines)
@@ -215,7 +216,6 @@ func sendHttp(addr string, data io.Reader) error {
 		fmt.Println("Error sending request", err)
 		return err
 	}
-
 	defer rsp.Body.Close()
 	return nil
 }
