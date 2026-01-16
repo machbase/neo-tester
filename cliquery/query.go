@@ -2,22 +2,23 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"time"
 
 	"github.com/machbase/neo-server/v8/api"
-	_ "github.com/machbase/neo-server/v8/api"
 	"github.com/machbase/neo-server/v8/api/machcli"
 )
 
 func main() {
-	var nClient = 10
+	var nClient = 50
 	var nCount = 1000
 
 	db, err := machcli.NewDatabase(&machcli.Config{
 		Host:         "127.0.0.1",
 		Port:         5656,
-		MaxOpenConn:  1000,
-		MaxOpenQuery: 1000,
+		MaxOpenConn:  -1,
+		MaxOpenQuery: -1,
 	})
 	if err != nil {
 		panic(err)
@@ -56,28 +57,46 @@ func main() {
 		} else {
 			go func(ctx context.Context, clientId int) {
 				defer wg.Done()
-				conn, err := db.Connect(ctx, api.WithPassword("sys", "manager"))
-				if err != nil {
-					panic(err)
-				}
-				defer conn.Close()
+				var conn *machcli.Conn
+				// if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
+				// 	panic(err)
+				// } else {
+				// 	conn = c.(*machcli.Conn)
+				// }
+				// defer conn.Close()
 
 				for j := 0; j < nCount; j++ {
-					rows, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT 100")
-					if err != nil {
+					if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
 						panic(err)
+					} else {
+						conn = c.(*machcli.Conn)
 					}
-					for rows.Next() {
-					}
-					rows.Close()
 
-					rows, err = conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT 100, 100")
+					tick := time.Now()
+					r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT 100, 100")
+					if err != nil {
+						fmt.Printf("client %d, elapsed %v\n", clientId, time.Since(tick))
+						panic(err)
+					}
+					rows := r.(*machcli.Rows)
+					n := 0
+					for rows.Next() {
+						if err := rows.Err(); err != nil {
+							panic(err)
+						}
+						n++
+					}
+					if n != 100 {
+						panic(fmt.Sprintf("invalid row count: %d", n))
+					}
+					err = rows.Close()
 					if err != nil {
 						panic(err)
 					}
-					for rows.Next() {
+
+					if err := conn.Close(); err != nil {
+						panic(err)
 					}
-					rows.Close()
 				}
 			}(ctx, i)
 		}
