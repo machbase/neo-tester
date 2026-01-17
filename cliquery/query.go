@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
-	"runtime"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/machbase/neo-server/v8/api"
@@ -12,6 +14,17 @@ import (
 )
 
 func main() {
+	var ignoreSignals = flag.Bool("ignore-signals", false, "ignore non-essential signals")
+	flag.Parse()
+
+	if *ignoreSignals {
+		fmt.Println("Ignoring non-essential signals")
+		// Ignore non-essential signals (Linux amd64)
+		signal.Ignore(
+			syscall.SIGURG, // 23: urgent condition on socket
+		)
+	}
+
 	var nClient = 100
 	var nCount = 1000
 	var start = time.Now()
@@ -50,8 +63,6 @@ func main() {
 		wg.Add(1)
 
 		go func(ctx context.Context, clientId int) {
-			runtime.LockOSThread()
-			defer runtime.UnlockOSThread()
 			defer wg.Done()
 			var conn *machcli.Conn
 			if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
@@ -60,14 +71,17 @@ func main() {
 				conn = c.(*machcli.Conn)
 			}
 			defer func() {
-				conn.Close()
+				err := conn.Close()
+				if err != nil {
+					panic(err)
+				}
 			}()
 			for j := 0; j < nCount; j++ {
 				tick := time.Now()
 				r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT 100")
 				if err != nil {
-					fmt.Printf("client %d, elapsed %v\n", clientId, time.Since(tick))
-					panic(err)
+					fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+					return
 				}
 				rows := r.(*machcli.Rows)
 				n := 0
@@ -86,12 +100,17 @@ func main() {
 						panic(fmt.Sprintf("invalid name: %s", name))
 					}
 				}
+				if err := rows.Err(); err != nil {
+					panic(err)
+				}
 				if n != 100 {
 					panic(fmt.Sprintf("invalid row count: %d", n))
 				}
+				tick = time.Now()
 				err = rows.Close()
 				if err != nil {
-					panic(err)
+					fmt.Printf("Close error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+					return
 				}
 			}
 		}(ctx, i)
