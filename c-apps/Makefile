@@ -11,7 +11,7 @@ DEFINES   += NBP_CFG_DL_STATIC
 WAPORT1  = $(shell echo $(ITF_PORT)+411 | bc)
 WAPORT2  = $(shell echo $(ITF_PORT)+421 | bc)
 
-EXECXX_TARGETS = append multi
+EXECXX_TARGETS = append multi multi2
 
 append_NAME    = append
 append_SRCS    = append.c
@@ -19,11 +19,15 @@ append_SRCS    = append.c
 multi_NAME    = multi
 multi_SRCS    = multi.c
 
+multi2_NAME    = multi2
+multi2_SRCS    = multi2.c
+
 post_all:
 	$(CP) $(BUILD_DIR)/append .
 	$(CP) $(BUILD_DIR)/multi .
+	$(CP) $(BUILD_DIR)/multi2 .
 
 clean:
-	@-rm -f append multi
+	@-rm -f append multi multi2
 
 include $(NBASISDEV_HOME)/core/makefiles/rule.mk
