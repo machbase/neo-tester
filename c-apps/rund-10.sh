@@ -1,0 +1,10 @@
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &
+ nohup ./direct 127.0.0.1 45656 20000 &

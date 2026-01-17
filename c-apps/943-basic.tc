@@ -1,0 +1,18 @@
+--drop table tag;
+--drop table src_table;
+create tagdata table TAG (name varchar(20) primary key, time datetime basetime, value double summarized);
+
+insert into tag metadata values ('TAG_00');
+insert into tag metadata values ('TAG_01');
+insert into tag metadata values ('TAG_02');
+insert into tag metadata values ('TAG_03');
+
+# normal
+insert into tag values ('TAG_00', '2017-01-02', 201.11);
+insert into tag values ('TAG_01', '2017-01-03', 201.78);
+insert into tag values ('TAG_02', '2017-01-04', 31.76);
+insert into tag values ('TAG_03', '2017-01-05', 1);
+
+
+
+select * from tag;
