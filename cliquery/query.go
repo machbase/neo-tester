@@ -2,11 +2,8 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
-	"os/signal"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/machbase/neo-server/v8/api"
@@ -14,19 +11,8 @@ import (
 )
 
 func main() {
-	var ignoreSignals = flag.Bool("ignore-signals", false, "ignore non-essential signals")
-	flag.Parse()
-
-	if *ignoreSignals {
-		fmt.Println("Ignoring non-essential signals")
-		// Ignore non-essential signals (Linux amd64)
-		signal.Ignore(
-			syscall.SIGURG, // 23: urgent condition on socket
-		)
-	}
-
-	var nClient = 100
-	var nCount = 1000
+	var nClient = 40
+	var nCount = 2500
 	var start = time.Now()
 
 	db, err := machcli.NewDatabase(&machcli.Config{
