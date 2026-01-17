@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"time"
 
@@ -11,7 +12,7 @@ import (
 )
 
 func main() {
-	var nClient = 50
+	var nClient = 100
 	var nCount = 1000
 	var start = time.Now()
 
@@ -44,32 +45,26 @@ func main() {
 	}
 	conn.Close()
 
-	mu := sync.Mutex{}
-
 	var wg sync.WaitGroup
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
 
 		go func(ctx context.Context, clientId int) {
+			runtime.LockOSThread()
+			defer runtime.UnlockOSThread()
 			defer wg.Done()
 			var conn *machcli.Conn
-			mu.Lock()
 			if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
 				panic(err)
 			} else {
 				conn = c.(*machcli.Conn)
 			}
-			mu.Unlock()
 			defer func() {
-				mu.Lock()
 				conn.Close()
-				mu.Unlock()
 			}()
 			for j := 0; j < nCount; j++ {
 				tick := time.Now()
-				mu.Lock()
 				r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT 100")
-				mu.Unlock()
 				if err != nil {
 					fmt.Printf("client %d, elapsed %v\n", clientId, time.Since(tick))
 					panic(err)
@@ -94,9 +89,7 @@ func main() {
 				if n != 100 {
 					panic(fmt.Sprintf("invalid row count: %d", n))
 				}
-				mu.Lock()
 				err = rows.Close()
-				mu.Unlock()
 				if err != nil {
 					panic(err)
 				}
