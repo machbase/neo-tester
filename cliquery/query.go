@@ -17,6 +17,7 @@ import (
 func main() {
 	var nClient = 50
 	var nCount = 1000
+	var nFetch = 100
 	var doCpuProfile = false
 	var doOSThreadLock = false
 	var doCreateData = false
@@ -28,6 +29,7 @@ func main() {
 
 	flag.IntVar(&nClient, "c", nClient, "number of clients")
 	flag.IntVar(&nCount, "n", nCount, "number of queries per client")
+	flag.IntVar(&nFetch, "f", nFetch, "number of rows to fetch per query")
 	flag.StringVar(&host, "h", host, "server host")
 	flag.IntVar(&port, "p", port, "server port")
 	flag.StringVar(&user, "u", user, "user")
@@ -60,7 +62,7 @@ func main() {
 			panic(result.Err())
 		}
 
-		for j := 0; j < 200; j++ {
+		for j := 0; j < nFetch*2; j++ {
 			result := conn.Exec(ctx, "INSERT INTO tag(name, time, value) VALUES('tag1', now, 123.45)")
 			if result.Err() != nil {
 				panic(result.Err())
@@ -110,7 +112,7 @@ func main() {
 			}()
 			for j := 0; j < nCount; j++ {
 				tick := time.Now()
-				r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT 100")
+				r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?", nFetch)
 				if err != nil {
 					fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 					return
@@ -135,7 +137,7 @@ func main() {
 				if err := rows.Err(); err != nil {
 					panic(err)
 				}
-				if n != 100 {
+				if n != nFetch {
 					panic(fmt.Sprintf("invalid row count: %d", n))
 				}
 				tick = time.Now()
