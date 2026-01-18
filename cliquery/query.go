@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime/pprof"
 	"sync"
 	"time"
 
@@ -48,6 +50,18 @@ func main() {
 	sessionElapsed = make([]time.Duration, nClient)
 	var startCh = make(chan struct{})
 	var wg sync.WaitGroup
+
+	var doCpuProfile = true
+	if doCpuProfile {
+		// go tool pprof -http=:8080 /tmp/query /tmp/cpu.prof
+		cpu_prof, err := os.Create("/tmp/cpu.prof")
+		if err != nil {
+			panic(err)
+		}
+		pprof.StartCPUProfile(cpu_prof)
+		defer pprof.StopCPUProfile()
+	}
+
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
 
