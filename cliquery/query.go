@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
 	"github.com/machbase/neo-server/v8/api/machcli"
 )
@@ -39,6 +40,7 @@ func main() {
 	flag.BoolVar(&doCreateData, "create", doCreateData, "create initial data")
 	flag.Parse()
 
+	fmt.Println("Neo Engine Version:", native.Version, "Build:", native.GitHash)
 	var start = time.Now()
 	db, err := machcli.NewDatabase(&machcli.Config{
 		Host:         host,
