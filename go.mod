@@ -3,7 +3,7 @@ module tester
 go 1.24.0
 
 require (
-	github.com/machbase/neo-server/v8 v8.0.71
+	github.com/machbase/neo-server/v8 v8.0.72-0.20260118023553-d08c7583a10d
 	github.com/tidwall/gjson v1.18.0
 	golang.org/x/text v0.31.0
 )
@@ -17,7 +17,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
-	github.com/machbase/neo-engine/v8 v8.0.60-0.20260116032018-927a7c74e631 // indirect
+	github.com/machbase/neo-engine/v8 v8.0.60 // indirect
 	github.com/mitchellh/go-wordwrap v1.0.1 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
