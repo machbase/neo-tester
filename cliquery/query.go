@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"sync"
 	"time"
@@ -15,12 +17,30 @@ import (
 func main() {
 	var nClient = 50
 	var nCount = 1000
+	var doCpuProfile = false
+	var doOSThreadLock = false
+	var doCreateData = false
 	var sessionElapsed []time.Duration
-	var start = time.Now()
+	var host = "127.0.0.1"
+	var port = 5656
+	var user = "sys"
+	var password = "manager"
 
+	flag.IntVar(&nClient, "c", nClient, "number of clients")
+	flag.IntVar(&nCount, "n", nCount, "number of queries per client")
+	flag.StringVar(&host, "h", host, "server host")
+	flag.IntVar(&port, "p", port, "server port")
+	flag.StringVar(&user, "u", user, "user")
+	flag.StringVar(&password, "P", password, "password")
+	flag.BoolVar(&doOSThreadLock, "T", doOSThreadLock, "enable OS thread lock")
+	flag.BoolVar(&doCpuProfile, "prof", doCpuProfile, "enable cpu profiling")
+	flag.BoolVar(&doCreateData, "create", doCreateData, "create initial data")
+	flag.Parse()
+
+	var start = time.Now()
 	db, err := machcli.NewDatabase(&machcli.Config{
-		Host:         "127.0.0.1",
-		Port:         5656,
+		Host:         host,
+		Port:         port,
 		MaxOpenConn:  -1,
 		MaxOpenQuery: -1,
 	})
@@ -30,28 +50,29 @@ func main() {
 	defer db.Close()
 
 	ctx := context.Background()
-	conn, err := db.Connect(ctx, api.WithPassword("sys", "manager"))
+	conn, err := db.Connect(ctx, api.WithPassword(user, password))
 	if err != nil {
 		panic(err)
 	}
-	result := conn.Exec(ctx, "CREATE TAG TABLE IF NOT EXISTS tag (name varchar(80) primary key, time DATETIME basetime, value DOUBLE)")
-	if result.Err() != nil {
-		panic(result.Err())
-	}
+	if doCreateData {
+		result := conn.Exec(ctx, "CREATE TAG TABLE IF NOT EXISTS tag (name varchar(80) primary key, time DATETIME basetime, value DOUBLE)")
+		if result.Err() != nil {
+			panic(result.Err())
+		}
 
-	// for j := 0; j < 200; j++ {
-	// 	result := conn.Exec(ctx, "INSERT INTO tag(name, time, value) VALUES('tag1', now, 123.45)")
-	// 	if result.Err() != nil {
-	// 		panic(result.Err())
-	// 	}
-	// }
+		for j := 0; j < 200; j++ {
+			result := conn.Exec(ctx, "INSERT INTO tag(name, time, value) VALUES('tag1', now, 123.45)")
+			if result.Err() != nil {
+				panic(result.Err())
+			}
+		}
+	}
 	conn.Close()
 
 	sessionElapsed = make([]time.Duration, nClient)
 	var startCh = make(chan struct{})
 	var wg sync.WaitGroup
 
-	var doCpuProfile = true
 	if doCpuProfile {
 		// go tool pprof -http=:8080 /tmp/query /tmp/cpu.prof
 		cpu_prof, err := os.Create("/tmp/cpu.prof")
@@ -67,6 +88,9 @@ func main() {
 
 		go func(ctx context.Context, clientId int) {
 			defer wg.Done()
+			if doOSThreadLock {
+				runtime.LockOSThread()
+			}
 			<-startCh
 			var conn *machcli.Conn
 			if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
@@ -140,5 +164,5 @@ func main() {
 		}
 	}
 	avgSessionElapsed := time.Duration(int64(totalSessionElapsed) / int64(nClient))
-	fmt.Printf("  Session Elapsed: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
+	fmt.Printf("  Sessions: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
 }
