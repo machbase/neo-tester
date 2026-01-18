@@ -11,8 +11,9 @@ import (
 )
 
 func main() {
-	var nClient = 40
-	var nCount = 2500
+	var nClient = 50
+	var nCount = 1000
+	var sessionElapsed []time.Duration
 	var start = time.Now()
 
 	db, err := machcli.NewDatabase(&machcli.Config{
@@ -36,20 +37,23 @@ func main() {
 		panic(result.Err())
 	}
 
-	for j := 0; j < 200; j++ {
-		result := conn.Exec(ctx, "INSERT INTO tag(name, time, value) VALUES('tag1', now, 123.45)")
-		if result.Err() != nil {
-			panic(result.Err())
-		}
-	}
+	// for j := 0; j < 200; j++ {
+	// 	result := conn.Exec(ctx, "INSERT INTO tag(name, time, value) VALUES('tag1', now, 123.45)")
+	// 	if result.Err() != nil {
+	// 		panic(result.Err())
+	// 	}
+	// }
 	conn.Close()
 
+	sessionElapsed = make([]time.Duration, nClient)
+	var startCh = make(chan struct{})
 	var wg sync.WaitGroup
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
 
 		go func(ctx context.Context, clientId int) {
 			defer wg.Done()
+			<-startCh
 			var conn *machcli.Conn
 			if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
 				panic(err)
@@ -61,6 +65,10 @@ func main() {
 				if err != nil {
 					panic(err)
 				}
+			}()
+			clientStart := time.Now()
+			defer func() {
+				sessionElapsed[clientId] = time.Since(clientStart)
 			}()
 			for j := 0; j < nCount; j++ {
 				tick := time.Now()
@@ -101,6 +109,22 @@ func main() {
 			}
 		}(ctx, i)
 	}
+	close(startCh)
 	wg.Wait()
-	fmt.Printf("All clients completed in %v  %d ops/sec\n", time.Since(start), int(float64(nClient*nCount)/time.Since(start).Seconds()))
+	fmt.Printf("All clients (%d) query(%d) completed in %v  %d ops/sec\n",
+		nClient, nCount, time.Since(start), int(float64(nClient*nCount)/time.Since(start).Seconds()))
+	var totalSessionElapsed time.Duration
+	var minSessionElapsed time.Duration
+	var maxSessionElapsed time.Duration
+	for i, d := range sessionElapsed {
+		totalSessionElapsed += d
+		if i == 0 || minSessionElapsed > d {
+			minSessionElapsed = d
+		}
+		if maxSessionElapsed < d {
+			maxSessionElapsed = d
+		}
+	}
+	avgSessionElapsed := time.Duration(int64(totalSessionElapsed) / int64(nClient))
+	fmt.Printf("  Session Elapsed: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
 }
