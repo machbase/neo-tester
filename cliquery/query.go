@@ -97,6 +97,8 @@ func main() {
 			}
 			<-startCh
 			var conn *machcli.Conn
+			var stmt *machcli.PreparedStmt
+
 			if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
 				panic(err)
 			} else {
@@ -112,9 +114,20 @@ func main() {
 			defer func() {
 				sessionElapsed[clientId] = time.Since(clientStart)
 			}()
+			if s, err := conn.Prepare(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?"); err != nil {
+				panic(err)
+			} else {
+				stmt = s.(*machcli.PreparedStmt)
+			}
+			defer func() {
+				err := stmt.Close()
+				if err != nil {
+					panic(err)
+				}
+			}()
 			for j := 0; j < nCount; j++ {
 				tick := time.Now()
-				r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?", nFetch)
+				r, err := stmt.Query(ctx, nFetch)
 				if err != nil {
 					fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 					return
@@ -140,11 +153,10 @@ func main() {
 					panic(err)
 				}
 				if n != nFetch {
-					panic(fmt.Sprintf("invalid row count: %d", n))
+					panic(fmt.Sprintf("invalid row count: %d repeat: %d", n, j))
 				}
 				tick = time.Now()
-				err = rows.Close()
-				if err != nil {
+				if err = rows.Close(); err != nil {
 					fmt.Printf("Close error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 					return
 				}
