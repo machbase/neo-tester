@@ -22,6 +22,7 @@ func main() {
 	var doCpuProfile = false
 	var doOSThreadLock = false
 	var doCreateData = false
+	var doPreparedStmt = false
 	var sessionElapsed []time.Duration
 	var host = "127.0.0.1"
 	var port = 5656
@@ -38,6 +39,7 @@ func main() {
 	flag.BoolVar(&doOSThreadLock, "T", doOSThreadLock, "enable OS thread lock")
 	flag.BoolVar(&doCpuProfile, "prof", doCpuProfile, "enable cpu profiling")
 	flag.BoolVar(&doCreateData, "create", doCreateData, "create initial data")
+	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.Parse()
 
 	fmt.Println("Neo Engine Version:", native.Version, "Build:", native.GitHash)
@@ -97,7 +99,6 @@ func main() {
 			}
 			<-startCh
 			var conn *machcli.Conn
-			var stmt *machcli.PreparedStmt
 
 			if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
 				panic(err)
@@ -114,58 +115,21 @@ func main() {
 			defer func() {
 				sessionElapsed[clientId] = time.Since(clientStart)
 			}()
-			if s, err := conn.Prepare(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?"); err != nil {
-				panic(err)
+			if doPreparedStmt {
+				RunPreparedQuery(ctx, clientId, conn, nCount, nFetch)
 			} else {
-				stmt = s.(*machcli.PreparedStmt)
-			}
-			defer func() {
-				if err := stmt.Close(); err != nil {
-					panic(err)
-				}
-			}()
-			for j := 0; j < nCount; j++ {
-				tick := time.Now()
-				r, err := stmt.Query(ctx, nFetch)
-				if err != nil {
-					fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
-					return
-				}
-				rows := r.(*machcli.Rows)
-				n := 0
-				for rows.Next() {
-					if err := rows.Err(); err != nil {
-						panic(err)
-					}
-					n++
-					var name string
-					var t time.Time
-					var v float64
-					if err := rows.Scan(&name, &t, &v); err != nil {
-						panic(err)
-					}
-					if name != "tag1" {
-						panic(fmt.Sprintf("invalid name: %s", name))
-					}
-				}
-				if err := rows.Err(); err != nil {
-					panic(err)
-				}
-				if n != nFetch {
-					panic(fmt.Sprintf("invalid row count: %d repeat: %d", n, j))
-				}
-				tick = time.Now()
-				if err = rows.Close(); err != nil {
-					fmt.Printf("Close error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
-					return
-				}
+				RunQuery(ctx, clientId, conn, nCount, nFetch)
 			}
 		}(ctx, i)
 	}
 	close(startCh)
 	wg.Wait()
-	fmt.Printf("All clients (%d) query(%d) completed in %v  %d ops/sec\n",
-		nClient, nCount, time.Since(start), int(float64(nClient*nCount)/time.Since(start).Seconds()))
+	mode := "Query"
+	if doPreparedStmt {
+		mode = "Prepare"
+	}
+	fmt.Printf("All clients (%d) query(%d) (%s mode) completed in %v  %d ops/sec\n",
+		nClient, nCount, mode, time.Since(start), int(float64(nClient*nCount)/time.Since(start).Seconds()))
 	var totalSessionElapsed time.Duration
 	var minSessionElapsed time.Duration
 	var maxSessionElapsed time.Duration
@@ -180,4 +144,94 @@ func main() {
 	}
 	avgSessionElapsed := time.Duration(int64(totalSessionElapsed) / int64(nClient))
 	fmt.Printf("  Sessions: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
+}
+
+func RunQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, nFetch int) {
+	for j := 0; j < nCount; j++ {
+		tick := time.Now()
+		r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?", nFetch)
+		if err != nil {
+			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+		rows := r.(*machcli.Rows)
+		n := 0
+		for rows.Next() {
+			if err := rows.Err(); err != nil {
+				panic(err)
+			}
+			n++
+			var name string
+			var t time.Time
+			var v float64
+			if err := rows.Scan(&name, &t, &v); err != nil {
+				panic(err)
+			}
+			if name != "tag1" {
+				panic(fmt.Sprintf("invalid name: %s", name))
+			}
+		}
+		if err := rows.Err(); err != nil {
+			panic(err)
+		}
+		if n != nFetch {
+			panic(fmt.Sprintf("invalid row count: %d", n))
+		}
+		tick = time.Now()
+		err = rows.Close()
+		if err != nil {
+			fmt.Printf("Close error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+	}
+}
+
+func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, nFetch int) {
+	var stmt *machcli.PreparedStmt
+	if s, err := conn.Prepare(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?"); err != nil {
+		panic(err)
+	} else {
+		stmt = s.(*machcli.PreparedStmt)
+	}
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			panic(err)
+		}
+	}()
+	for j := 0; j < nCount; j++ {
+		tick := time.Now()
+		r, err := stmt.Query(ctx, nFetch)
+		if err != nil {
+			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+		rows := r.(*machcli.Rows)
+		n := 0
+		for rows.Next() {
+			if err := rows.Err(); err != nil {
+				panic(err)
+			}
+			n++
+			var name string
+			var t time.Time
+			var v float64
+			if err := rows.Scan(&name, &t, &v); err != nil {
+				panic(err)
+			}
+			if name != "tag1" {
+				panic(fmt.Sprintf("invalid name: %s", name))
+			}
+		}
+		if err := rows.Err(); err != nil {
+			panic(err)
+		}
+		if n != nFetch {
+			panic(fmt.Sprintf("invalid row count: %d repeat: %d", n, j))
+		}
+		tick = time.Now()
+		if err = rows.Close(); err != nil {
+			fmt.Printf("Close error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+	}
 }
