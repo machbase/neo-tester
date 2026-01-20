@@ -120,8 +120,7 @@ func main() {
 				stmt = s.(*machcli.PreparedStmt)
 			}
 			defer func() {
-				err := stmt.Close()
-				if err != nil {
+				if err := stmt.Close(); err != nil {
 					panic(err)
 				}
 			}()
