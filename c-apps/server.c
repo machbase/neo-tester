@@ -2,7 +2,7 @@
  * Simple multi-threaded socket server.
  *
  * Interface:
- *   ./server port [cpu_count]
+ *   ./server port [cpu_count] [chunk_count]
  ******************************************************************************/
 
 #include <stdio.h>
@@ -21,6 +21,8 @@
 
 #define DATA_SIZE 1000
 #define STAT_INTERVAL 10000
+
+static int g_chunk_count = 1; /* how many pieces to split each DATA_SIZE recv */
 
 struct thread_args {
     int fd;
@@ -133,13 +135,34 @@ static void *run_thread(void *arg)
     unsigned char buf[DATA_SIZE];
     unsigned long long msg_count = 0;
 
+    const size_t chunk_size = DATA_SIZE / g_chunk_count;
+    const size_t remainder = DATA_SIZE % g_chunk_count;
+
     clock_gettime(CLOCK_MONOTONIC, &sStartTime);
 
     for (;;)
     {
         int i = 0;
         long sum = (long)args;
-        if (recv_all(args->fd, buf, DATA_SIZE) != 0)
+        size_t offset = 0;
+        int status = 0;
+
+        for (int part = 0; part < g_chunk_count; part++)
+        {
+            size_t cur = chunk_size + ((size_t)part < remainder ? 1 : 0);
+            if (cur == 0)
+            {
+                continue;
+            }
+            if (recv_all(args->fd, buf + offset, cur) != 0)
+            {
+                status = -1;
+                break;
+            }
+            offset += cur;
+        }
+
+        if (status != 0)
         {
             break;
         }
@@ -173,23 +196,20 @@ int main(int argc, char **argv)
     int sPort = 0;
     int sCpuCount = 8;
 
-    if (argc < 2 || argc > 3)
+    if (argc < 2 || argc > 4)
     {
-        fprintf(stderr, "Usage : ./server port [cpu_count]\n");
+        fprintf(stderr, "Usage : ./server port [cpu_count] [chunk_count]\n");
         exit(-1);
     }
-    else
+
+    sPort = atoi(argv[1]);
+    if (argc >= 3)
     {
-        switch (argc)
-        {
-            case 3:
-                sCpuCount = atoi(argv[2]);
-            case 2:
-                sPort = atoi(argv[1]);
-                break;
-            default:
-                break;
-        }
+        sCpuCount = atoi(argv[2]);
+    }
+    if (argc == 4)
+    {
+        g_chunk_count = atoi(argv[3]);
     }
 
     if (sPort <= 0)
@@ -201,6 +221,12 @@ int main(int argc, char **argv)
     if (sCpuCount <= 0)
     {
         sCpuCount = 8;
+    }
+
+    if (g_chunk_count <= 0)
+    {
+        fprintf(stderr, "chunk_count must be > 0\n");
+        exit(-1);
     }
 
 #ifdef __linux__

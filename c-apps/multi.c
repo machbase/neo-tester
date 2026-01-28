@@ -117,7 +117,9 @@ void printError(SQLHENV aEnv, SQLHDBC aCon, SQLHSTMT aStmt, char *aMsg)
     }
 }
 
-#define SQL_STR  "select * from tag where name = 'TAG_00' and time between '2017-01-01' and '2017-01-02'"
+//#define SQL_STR  "select * from tag where name = 'TAG_00' and time between '2017-01-01' and '2017-01-02'"
+//#define SQL_STR  "select * from v$version limit 1"
+#define SQL_STR  "commit"
 
 int directExecute2(SQLHSTMT aStmt, int aPrint)
 {
@@ -176,11 +178,11 @@ int directExecute2(SQLHSTMT aStmt, int aPrint)
         }
     }
 
-    if( SQLFreeStmt(aStmt, SQL_CLOSE) != SQL_SUCCESS )
-    {
-        printError(gEnv, gCon, aStmt, "SQLFreeStmt Error");
-        goto error;
-    }
+    /* if( SQLFreeStmt(aStmt, SQL_CLOSE) != SQL_SUCCESS ) */
+    /* { */
+    /*     printError(gEnv, gCon, aStmt, "SQLFreeStmt Error"); */
+    /*     goto error; */
+    /* } */
 
     return 0;
 
@@ -217,10 +219,10 @@ void *run_thread(void *arg)
         /* prepareExecute(sStmt); */
     }
 
-    if (SQL_ERROR == SQLFreeStmt(sStmt, SQL_DROP))
-    {
-        outError("FreeStmt", sStmt);
-    }
+    /* if (SQL_ERROR == SQLFreeStmt(sStmt, SQL_DROP)) */
+    /* { */
+    /*     outError("FreeStmt", sStmt); */
+    /* } */
 
     clock_gettime(CLOCK_MONOTONIC, &sEndTime);
     double sElapsedSec = (double)(sEndTime.tv_sec - sStartTime.tv_sec) +
