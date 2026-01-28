@@ -117,9 +117,9 @@ void printError(SQLHENV aEnv, SQLHDBC aCon, SQLHSTMT aStmt, char *aMsg)
     }
 }
 
-//#define SQL_STR  "select * from tag where name = 'TAG_00' and time between '2017-01-01' and '2017-01-02'"
+#define SQL_STR  "select * from tag where name = 'TAG_00' and time between '2017-01-01' and '2017-01-02'"
 //#define SQL_STR  "select * from v$version limit 1"
-#define SQL_STR  "commit"
+//#define SQL_STR  "commit"
 
 int directExecute2(SQLHSTMT aStmt, int aPrint)
 {

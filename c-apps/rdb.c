@@ -131,8 +131,12 @@ static int directExecute2(int print_rows)
 
     char select_sql[128];
     snprintf(select_sql, sizeof(select_sql),
-             "SELECT id, val, created_at FROM " TMP_TABLE " WHERE id=1 limit 1");
+             "SELECT id, val, created_at FROM " TMP_TABLE " WHERE id=1 limit 1;");
 
+    if (print_rows != 0)
+    {
+        fprintf(stderr, "query : %s\n", select_sql);
+    }
     if (mysql_query(gCon, select_sql) != 0)
     {
         fprintf(stderr, "select failed: (%u) %s\n", mysql_errno(gCon), mysql_error(gCon));
@@ -235,7 +239,7 @@ int main(int argc, char **argv)
     }
 
     /* Prepare schema once before threads start. */
-    ensure_schema(sHost, (unsigned int)sPort);
+    /* ensure_schema(sHost, (unsigned int)sPort); */
 
     pthread_t *threads = calloc((size_t)sThreadCount, sizeof(*threads));
     struct thread_args *args = calloc((size_t)sThreadCount, sizeof(*args));
