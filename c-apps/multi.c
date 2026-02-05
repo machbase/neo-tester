@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
+#include <string.h>
 #include <itf.h>
 #include <machbase_sqlcli.h>
 
@@ -190,12 +191,80 @@ error:
     return -1;
 }
 
+int prepareExecute(SQLHSTMT aStmt, int aPrint)
+{
+    SQLLEN      sIdLen      = 0;
+    SQLLEN      sValueLen   = 0;
+    SQLLEN      sRegDateLen = 0;
+
+    char                 sId[33];
+    double               sValue;
+    SQL_TIMESTAMP_STRUCT sRegDate;
+
+    if( SQLExecute(aStmt) != SQL_SUCCESS )
+    {
+        printError(gEnv, gCon, aStmt, "SQLExecute Error");
+        goto error;
+    }
+
+    if( SQLBindCol(aStmt, 1, SQL_C_CHAR, sId, sizeof(sId), &sIdLen) != SQL_SUCCESS )
+    {
+        printError(gEnv, gCon, aStmt, "SQLBindCol 1 Error");
+        goto error;
+    }
+
+    if( SQLBindCol(aStmt, 2, SQL_C_TYPE_TIMESTAMP, &sRegDate, 0, &sRegDateLen) != SQL_SUCCESS )
+    {
+        printError(gEnv, gCon, aStmt, "SQLBindCol 2 Error");
+        goto error;
+    }
+
+    if( SQLBindCol(aStmt, 3, SQL_C_DOUBLE, &sValue, 0, &sValueLen) != SQL_SUCCESS )
+    {
+        printError(gEnv, gCon, aStmt, "SQLBindCol 3 Error");
+        goto error;
+    }
+
+    if (aPrint != 0)
+    {
+        printf("--------------------------------------------------------------------------------\n");
+        printf("%-33s%-33s%-33s\n","NAME","TIME","VALUE");
+        printf("--------------------------------------------------------------------------------\n");
+    }
+
+    while( SQLFetch(aStmt) == SQL_SUCCESS )
+    {
+        if (aPrint != 0)
+        {
+            printf("%-33s", sId);
+            printf("%d-%02d-%02d %02d:%02d:%02d 000:000:000 ",
+                        sRegDate.year, sRegDate.month, sRegDate.day,
+                        sRegDate.hour, sRegDate.minute, sRegDate.second);
+            printf("%-.2lf", sValue);
+
+            printf("\n");
+        }
+    }
+
+    /* if( SQLFreeStmt(aStmt, SQL_CLOSE) != SQL_SUCCESS ) */
+    /* { */
+    /*     printError(gEnv, gCon, aStmt, "SQLFreeStmt(SQL_CLOSE) Error"); */
+    /*     goto error; */
+    /* } */
+
+    return 0;
+
+error:
+    return -1;
+}
+
 struct thread_args {
     char *host;
     int port;
     int test_num;
     int thread_index;
     int print_rows;
+    int use_prepare;
 };
 
 void *run_thread(void *arg)
@@ -213,16 +282,30 @@ void *run_thread(void *arg)
         outError("AllocStmt", sStmt);
     }
 
-    for (int i = 0; i < args->test_num; i++)
+    if (args->use_prepare)
     {
-        directExecute2(sStmt, args->print_rows);
-        /* prepareExecute(sStmt); */
+        if (SQLPrepare(sStmt, (SQLCHAR *)SQL_STR, SQL_NTS) == SQL_ERROR)
+        {
+            outError("Prepare error", sStmt);
+        }
     }
 
-    /* if (SQL_ERROR == SQLFreeStmt(sStmt, SQL_DROP)) */
-    /* { */
-    /*     outError("FreeStmt", sStmt); */
-    /* } */
+    for (int i = 0; i < args->test_num; i++)
+    {
+        if (args->use_prepare)
+        {
+            prepareExecute(sStmt, args->print_rows);
+        }
+        else
+        {
+            directExecute2(sStmt, args->print_rows);
+        }
+    }
+
+    if (SQL_ERROR == SQLFreeStmt(sStmt, SQL_DROP))
+    {
+        outError("FreeStmt", sStmt);
+    }
 
     clock_gettime(CLOCK_MONOTONIC, &sEndTime);
     double sElapsedSec = (double)(sEndTime.tv_sec - sStartTime.tv_sec) +
@@ -241,26 +324,35 @@ int main(int argc, char **argv)
     int    sTestNum = 0;
     int    sThreadCount = 0;
     int    sPrintRows = 0;
+    int    sUsePrepare = 0;
+    int    sArgIdx = 1;
 
-    if (argc != 6)
+    if (argc >= 2 && strcmp(argv[1], "-p") == 0)
     {
-        fprintf(stderr, "Usage : ./multi host port test_num thread_count print_rows\n");
+        sUsePrepare = 1;
+        sArgIdx++;
+    }
+
+    if (argc != (sUsePrepare ? 7 : 6))
+    {
+        fprintf(stderr, "Usage : ./multi [-p] host port test_num thread_count print_rows\n");
         exit(-1);
     }
     else
     {
-        switch (argc)
+        switch (argc - sArgIdx + 1)
         {
-            case 6:
-                sPrintRows = atoi(argv[5]);
-            case 5:
-                sThreadCount = atoi(argv[4]);
+            case 6: /* flag + 5 args */
+            case 5: /* no flag + 5 args */
+                sPrintRows = atoi(argv[sArgIdx + 4]);
             case 4:
-                sTestNum = atoi(argv[3]);
+                sThreadCount = atoi(argv[sArgIdx + 3]);
             case 3:
-                sPort = atoi(argv[2]);
+                sTestNum = atoi(argv[sArgIdx + 2]);
             case 2:
-                sHost = argv[1];
+                sPort = atoi(argv[sArgIdx + 1]);
+            case 1:
+                sHost = argv[sArgIdx];
                 break;
             default:
                 break;
@@ -291,6 +383,7 @@ int main(int argc, char **argv)
         args[i].test_num = sTestNum;
         args[i].thread_index = i;
         args[i].print_rows = sPrintRows;
+        args[i].use_prepare = sUsePrepare;
 
         if (pthread_create(&threads[i], NULL, run_thread, &args[i]) != 0)
         {
