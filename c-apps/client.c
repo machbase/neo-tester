@@ -214,6 +214,11 @@ int main(int argc, char **argv)
         exit(-1);
     }
 
+    struct timespec start_ts;
+    struct timespec end_ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &start_ts);
+
     for (int i = 0; i < sThreadCount; i++)
     {
         args[i].host = sHost;
@@ -235,6 +240,17 @@ int main(int argc, char **argv)
     {
         pthread_join(threads[i], NULL);
     }
+
+    clock_gettime(CLOCK_MONOTONIC, &end_ts);
+
+    double total_elapsed = (double)(end_ts.tv_sec - start_ts.tv_sec) +
+                           (double)(end_ts.tv_nsec - start_ts.tv_nsec) / 1000000000.0;
+
+    long long total_requests = (long long)sTestNum * (long long)sThreadCount;
+    double rps = total_elapsed > 0.0 ? (double)total_requests / total_elapsed : 0.0;
+
+    printf("client total elapsed time: %.6f sec\n", total_elapsed);
+    printf("client total throughput: %.2f req/sec (%lld requests)\n", rps, total_requests);
 
     free(threads);
     free(args);

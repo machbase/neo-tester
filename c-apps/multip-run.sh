@@ -1,0 +1,9 @@
+./multi -p  127.0.0.1 $ITF_PORT 100000 1 0
+./multi -p  127.0.0.1 $ITF_PORT 100000 4 0
+./multi -p  127.0.0.1 $ITF_PORT 100000 8 0
+./multi -p  127.0.0.1 $ITF_PORT 100000 12 0
+./multi -p  127.0.0.1 $ITF_PORT 100000 16 0
+./multi -p  127.0.0.1 $ITF_PORT 100000 32 0
+./multi -p  127.0.0.1 $ITF_PORT 100000 64 0
+
+
