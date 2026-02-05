@@ -17,6 +17,9 @@
 static __thread SQLHENV gEnv;
 static __thread SQLHDBC gCon;
 
+int    gPrintRows = 0;
+
+
 void db_connect(char * sHost, unsigned int sPort)
 {
     char   sConStr[1024];
@@ -59,7 +62,7 @@ void db_connect(char * sHost, unsigned int sPort)
         SQLFreeEnv(gEnv);
         exit(1);
     }
-    if (aPrint != 0)
+    if (gPrintRows != 0)
     {
         printf("connected ... \n");
     }
@@ -326,7 +329,6 @@ int main(int argc, char **argv)
     int    sPort    = 0;
     int    sTestNum = 0;
     int    sThreadCount = 0;
-    int    sPrintRows = 0;
     int    sUsePrepare = 0;
     int    sArgIdx = 1;
 
@@ -347,7 +349,7 @@ int main(int argc, char **argv)
         {
             case 6: /* flag + 5 args */
             case 5: /* no flag + 5 args */
-                sPrintRows = atoi(argv[sArgIdx + 4]);
+                gPrintRows = atoi(argv[sArgIdx + 4]);
             case 4:
                 sThreadCount = atoi(argv[sArgIdx + 3]);
             case 3:
@@ -390,7 +392,7 @@ int main(int argc, char **argv)
         args[i].port = sPort;
         args[i].test_num = sTestNum;
         args[i].thread_index = i;
-        args[i].print_rows = sPrintRows;
+        args[i].print_rows = gPrintRows;
         args[i].use_prepare = sUsePrepare;
 
         if (pthread_create(&threads[i], NULL, run_thread, &args[i]) != 0)
