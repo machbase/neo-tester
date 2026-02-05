@@ -2,7 +2,7 @@
  * Simple multi-threaded socket server.
  *
  * Interface:
- *   ./server port [cpu_count] [chunk_count]
+ *   ./server port [cpu_count] [busyloop] [chunk_count]
  ******************************************************************************/
 
 #include <stdio.h>
@@ -23,6 +23,7 @@
 #define STAT_INTERVAL 10000
 
 static int g_chunk_count = 1; /* how many pieces to split each DATA_SIZE recv */
+static int g_busyloop = 100000; /* iterations per message for dummy work */
 
 struct thread_args {
     int fd;
@@ -168,7 +169,7 @@ static void *run_thread(void *arg)
         }
         msg_count++;
 
-        for (i = 0; i <100000; i++) sum++;
+        for (i = 0; i < g_busyloop; i++) sum++;
         if (STAT_INTERVAL > 0 && (msg_count % STAT_INTERVAL) == 0)
         {
             printf("server thread %d processed %llu messages\n",
@@ -196,9 +197,9 @@ int main(int argc, char **argv)
     int sPort = 0;
     int sCpuCount = 8;
 
-    if (argc < 2 || argc > 4)
+    if (argc < 2 || argc > 5)
     {
-        fprintf(stderr, "Usage : ./server port [cpu_count] [chunk_count]\n");
+        fprintf(stderr, "Usage : ./server port [cpu_count] [busyloop] [chunk_count]\n");
         exit(-1);
     }
 
@@ -207,9 +208,13 @@ int main(int argc, char **argv)
     {
         sCpuCount = atoi(argv[2]);
     }
-    if (argc == 4)
+    if (argc >= 4)
     {
-        g_chunk_count = atoi(argv[3]);
+        g_busyloop = atoi(argv[3]);
+    }
+    if (argc == 5)
+    {
+        g_chunk_count = atoi(argv[4]);
     }
 
     if (sPort <= 0)
@@ -221,6 +226,11 @@ int main(int argc, char **argv)
     if (sCpuCount <= 0)
     {
         sCpuCount = 8;
+    }
+
+    if (g_busyloop <= 0)
+    {
+        g_busyloop = 100000;
     }
 
     if (g_chunk_count <= 0)
