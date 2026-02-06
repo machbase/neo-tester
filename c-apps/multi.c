@@ -124,7 +124,8 @@ void printError(SQLHENV aEnv, SQLHDBC aCon, SQLHSTMT aStmt, char *aMsg)
     }
 }
 
-#define SQL_STR  "select * from tag where name = 'TAG_00' and time between '2017-01-01' and '2017-01-02'"
+//#define SQL_STR  "select * from tag where name = 'TAG_00' and time between to_date('2017-01-01 00:00:00 000:000:000', 'YYYY-MM-DD HH24:MI:SS mmm:uuu:nnn') and to_date('2017-01-02 00:00:00 000:000:000','YYYY-MM-DD HH24:MI:SS mmm:uuu:nnn')"
+#define SQL_STR  "select * from tag where name = 'TAG_00' and time between '2017-01-01 00:00:00 000:000:000' and '2017-01-02 00:00:00 000:000:000'"
 //#define SQL_STR  "select * from v$version limit 1"
 //#define SQL_STR  "commit"
 
