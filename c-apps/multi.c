@@ -126,6 +126,11 @@ void printError(SQLHENV aEnv, SQLHDBC aCon, SQLHSTMT aStmt, char *aMsg)
 
 //#define SQL_STR  "select * from tag where name = 'TAG_00' and time between to_date('2017-01-01 00:00:00 000:000:000', 'YYYY-MM-DD HH24:MI:SS mmm:uuu:nnn') and to_date('2017-01-02 00:00:00 000:000:000','YYYY-MM-DD HH24:MI:SS mmm:uuu:nnn')"
 #define SQL_STR  "select * from tag where name = 'TAG_00' and time between '2017-01-01 00:00:00 000:000:000' and '2017-01-02 00:00:00 000:000:000'"
+#define PREPARE_SQL_STR "select * from tag where name = ? and time between ? and ? limit ?"
+#define PREPARE_TAG_NAME "TAG_00"
+#define PREPARE_START_TIME "2017-01-01 00:00:00 000:000:000"
+#define PREPARE_END_TIME "2017-01-02 00:00:00 000:000:000"
+#define PREPARE_LIMIT_COUNT 100
 //#define SQL_STR  "select * from v$version limit 1"
 //#define SQL_STR  "commit"
 
@@ -137,6 +142,61 @@ struct fetch_buffer {
     double      sValue;
     SQL_TIMESTAMP_STRUCT sRegDate;
 };
+
+struct prepare_bind_param {
+    SQLLEN      sTagNameLen;
+    SQLLEN      sStartTimeLen;
+    SQLLEN      sEndTimeLen;
+    SQLLEN      sLimitCountLen;
+    char        sTagName[33];
+    char        sStartTime[64];
+    char        sEndTime[64];
+    SQLINTEGER  sLimitCount;
+};
+
+int bindPrepareParameters(SQLHSTMT aStmt, struct prepare_bind_param *aParam)
+{
+    if (SQLBindParameter(aStmt, 1, SQL_PARAM_INPUT,
+                         SQL_C_CHAR, SQL_VARCHAR,
+                         strlen(aParam->sTagName), 0,
+                         aParam->sTagName, sizeof(aParam->sTagName), &aParam->sTagNameLen) != SQL_SUCCESS)
+    {
+        printError(gEnv, gCon, aStmt, "SQLBindParameter 1 Error");
+        goto error;
+    }
+
+    if (SQLBindParameter(aStmt, 2, SQL_PARAM_INPUT,
+                         SQL_C_CHAR, SQL_VARCHAR,
+                         strlen(aParam->sStartTime), 0,
+                         aParam->sStartTime, sizeof(aParam->sStartTime), &aParam->sStartTimeLen) != SQL_SUCCESS)
+    {
+        printError(gEnv, gCon, aStmt, "SQLBindParameter 2 Error");
+        goto error;
+    }
+
+    if (SQLBindParameter(aStmt, 3, SQL_PARAM_INPUT,
+                         SQL_C_CHAR, SQL_VARCHAR,
+                         strlen(aParam->sEndTime), 0,
+                         aParam->sEndTime, sizeof(aParam->sEndTime), &aParam->sEndTimeLen) != SQL_SUCCESS)
+    {
+        printError(gEnv, gCon, aStmt, "SQLBindParameter 3 Error");
+        goto error;
+    }
+
+    if (SQLBindParameter(aStmt, 4, SQL_PARAM_INPUT,
+                         SQL_C_LONG, SQL_INTEGER,
+                         0, 0,
+                         &aParam->sLimitCount, 0, &aParam->sLimitCountLen) != SQL_SUCCESS)
+    {
+        printError(gEnv, gCon, aStmt, "SQLBindParameter 4 Error");
+        goto error;
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
 
 int bindFetchColumns(SQLHSTMT aStmt, struct fetch_buffer *aFetch)
 {
@@ -254,7 +314,7 @@ struct thread_args {
     int test_num;
     int thread_index;
     int print_rows;
-    int use_prepare;
+    int prepare_mode; /* 0: direct, 1: -p, 2: -p2 */
 };
 
 void *run_thread(void *arg)
@@ -264,8 +324,10 @@ void *run_thread(void *arg)
     struct timespec sEndTime;
     SQLHSTMT sStmt;
     struct fetch_buffer sFetch;
+    struct prepare_bind_param sPrepareParam;
 
     memset(&sFetch, 0, sizeof(sFetch));
+    memset(&sPrepareParam, 0, sizeof(sPrepareParam));
 
     db_connect(args->host, args->port);
     clock_gettime(CLOCK_MONOTONIC, &sStartTime);
@@ -275,7 +337,16 @@ void *run_thread(void *arg)
         outError("AllocStmt", sStmt);
     }
 
-    if (args->use_prepare)
+    snprintf(sPrepareParam.sTagName, sizeof(sPrepareParam.sTagName), "%s", PREPARE_TAG_NAME);
+    snprintf(sPrepareParam.sStartTime, sizeof(sPrepareParam.sStartTime), "%s", PREPARE_START_TIME);
+    snprintf(sPrepareParam.sEndTime, sizeof(sPrepareParam.sEndTime), "%s", PREPARE_END_TIME);
+    sPrepareParam.sTagNameLen = SQL_NTS;
+    sPrepareParam.sStartTimeLen = SQL_NTS;
+    sPrepareParam.sEndTimeLen = SQL_NTS;
+    sPrepareParam.sLimitCount = PREPARE_LIMIT_COUNT;
+    sPrepareParam.sLimitCountLen = 0;
+
+    if (args->prepare_mode == 1)
     {
         if (SQLPrepare(sStmt, (SQLCHAR *)SQL_STR, SQL_NTS) == SQL_ERROR)
         {
@@ -283,16 +354,40 @@ void *run_thread(void *arg)
         }
     }
 
-    if (bindFetchColumns(sStmt, &sFetch) != 0)
+    if (args->prepare_mode != 2 && bindFetchColumns(sStmt, &sFetch) != 0)
     {
         outError("BindCol", sStmt);
     }
 
     for (int i = 0; i < args->test_num; i++)
     {
-        if (args->use_prepare)
+        if (args->prepare_mode == 1)
         {
             prepareExecute(sStmt, args->print_rows, &sFetch);
+        }
+        else if (args->prepare_mode == 2)
+        {
+            if (SQLPrepare(sStmt, (SQLCHAR *)PREPARE_SQL_STR, SQL_NTS) == SQL_ERROR)
+            {
+                outError("Prepare error", sStmt);
+            }
+
+            if (bindPrepareParameters(sStmt, &sPrepareParam) != 0)
+            {
+                outError("BindParameter", sStmt);
+            }
+
+            if (bindFetchColumns(sStmt, &sFetch) != 0)
+            {
+                outError("BindCol", sStmt);
+            }
+
+            prepareExecute(sStmt, args->print_rows, &sFetch);
+
+            if (SQLFreeStmt(sStmt, SQL_CLOSE) == SQL_ERROR)
+            {
+                outError("FreeStmt(SQL_CLOSE)", sStmt);
+            }
         }
         else
         {
@@ -321,18 +416,23 @@ int main(int argc, char **argv)
     int    sPort    = 0;
     int    sTestNum = 0;
     int    sThreadCount = 0;
-    int    sUsePrepare = 0;
+    int    sPrepareMode = 0;
     int    sArgIdx = 1;
 
     if (argc >= 2 && strcmp(argv[1], "-p") == 0)
     {
-        sUsePrepare = 1;
+        sPrepareMode = 1;
+        sArgIdx++;
+    }
+    else if (argc >= 2 && strcmp(argv[1], "-p2") == 0)
+    {
+        sPrepareMode = 2;
         sArgIdx++;
     }
 
-    if (argc != (sUsePrepare ? 7 : 6))
+    if (argc != (sPrepareMode ? 7 : 6))
     {
-        fprintf(stderr, "Usage : ./multi [-p] host port test_num thread_count print_rows\n");
+        fprintf(stderr, "Usage : ./multi [-p|-p2] host port test_num thread_count print_rows\n");
         exit(-1);
     }
     else
@@ -385,7 +485,7 @@ int main(int argc, char **argv)
         args[i].test_num = sTestNum;
         args[i].thread_index = i;
         args[i].print_rows = gPrintRows;
-        args[i].use_prepare = sUsePrepare;
+        args[i].prepare_mode = sPrepareMode;
 
         if (pthread_create(&threads[i], NULL, run_thread, &args[i]) != 0)
         {
