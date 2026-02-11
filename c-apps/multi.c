@@ -354,7 +354,7 @@ void *run_thread(void *arg)
         }
     }
 
-    if (args->prepare_mode != 2 && bindFetchColumns(sStmt, &sFetch) != 0)
+    if (bindFetchColumns(sStmt, &sFetch) != 0)
     {
         outError("BindCol", sStmt);
     }
@@ -375,11 +375,6 @@ void *run_thread(void *arg)
             if (bindPrepareParameters(sStmt, &sPrepareParam) != 0)
             {
                 outError("BindParameter", sStmt);
-            }
-
-            if (bindFetchColumns(sStmt, &sFetch) != 0)
-            {
-                outError("BindCol", sStmt);
             }
 
             prepareExecute(sStmt, args->print_rows, &sFetch);
