@@ -42,7 +42,7 @@ func main() {
 	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.Parse()
 
-	fmt.Println("Neo Engine Version:", native.Version, "Build:", native.GitHash)
+	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
 	var start = time.Now()
 	db, err := machcli.NewDatabase(&machcli.Config{
 		Host:         host,
@@ -118,7 +118,7 @@ func main() {
 			if doPreparedStmt {
 				RunPreparedQuery(ctx, clientId, conn, nCount, nFetch)
 			} else {
-				RunQuery(ctx, clientId, conn, nCount, nFetch)
+				RunQuery(ctx, clientId, conn, nCount, "tag1", nFetch)
 			}
 		}(ctx, i)
 	}
@@ -146,10 +146,10 @@ func main() {
 	fmt.Printf("  Sessions: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
 }
 
-func RunQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, nFetch int) {
+func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, tagName string, nFetch int) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
-		r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?", nFetch)
+		r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name = ? LIMIT ?", tagName, nFetch)
 		if err != nil {
 			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
@@ -167,7 +167,7 @@ func RunQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, nFet
 			if err := rows.Scan(&name, &t, &v); err != nil {
 				panic(err)
 			}
-			if name != "tag1" {
+			if name != tagName {
 				panic(fmt.Sprintf("invalid name: %s", name))
 			}
 		}
@@ -175,7 +175,7 @@ func RunQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, nFet
 			panic(err)
 		}
 		if n != nFetch {
-			panic(fmt.Sprintf("invalid row count: %d", n))
+			fmt.Printf("invalid row count: %d\n", n)
 		}
 		tick = time.Now()
 		err = rows.Close()

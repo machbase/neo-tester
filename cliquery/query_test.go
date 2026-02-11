@@ -50,8 +50,9 @@ func BenchmarkQuery(b *testing.B) {
 	}
 	defer conn.Close()
 
+	tagName := "tag1"
 	for i := 0; i < b.N; i++ {
-		rows, err := conn.Query(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT 100")
+		rows, err := conn.Query(ctx, "SELECT * FROM tag WHERE name=? LIMIT 100", tagName)
 		if err != nil {
 			panic(err)
 		}

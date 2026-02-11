@@ -239,7 +239,7 @@ type Query struct {
 	betweenTo   string
 }
 
-func RunQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
+func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
 		r, err := conn.Query(ctx, `
@@ -256,7 +256,7 @@ func RunQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Qu
 			order by time
 			limit ?`, q.code, q.betweenFrom, q.betweenTo, q.nFetch)
 		if err != nil {
-			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
 		rows := r.(*machcli.Rows)
@@ -285,7 +285,7 @@ func RunQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Qu
 		tick = time.Now()
 		err = rows.Close()
 		if err != nil {
-			fmt.Printf("Close error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			fmt.Printf("Close error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
 	}
@@ -319,7 +319,7 @@ func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount i
 		tick := time.Now()
 		r, err := stmt.Query(ctx, q.code, q.betweenFrom, q.betweenTo, q.nFetch)
 		if err != nil {
-			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			fmt.Printf("Query error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
 		rows := r.(*machcli.Rows)
@@ -347,7 +347,7 @@ func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount i
 		}
 		tick = time.Now()
 		if err = rows.Close(); err != nil {
-			fmt.Printf("Close error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			fmt.Printf("Close error(3), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
 	}
