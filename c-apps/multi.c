@@ -384,10 +384,10 @@ void *run_thread(void *arg)
 
             prepareExecute(sStmt, args->print_rows, &sFetch);
 
-            if (SQLFreeStmt(sStmt, SQL_CLOSE) == SQL_ERROR)
-            {
-                outError("FreeStmt(SQL_CLOSE)", sStmt);
-            }
+            /* if (SQLFreeStmt(sStmt, SQL_CLOSE) == SQL_ERROR) */
+            /* { */
+            /*     outError("FreeStmt(SQL_CLOSE)", sStmt); */
+            /* } */
         }
         else
         {
@@ -395,10 +395,10 @@ void *run_thread(void *arg)
         }
     }
 
-    if (SQL_ERROR == SQLFreeStmt(sStmt, SQL_DROP))
-    {
-        outError("FreeStmt", sStmt);
-    }
+    /* if (SQL_ERROR == SQLFreeStmt(sStmt, SQL_DROP)) */
+    /* { */
+    /*     outError("FreeStmt", sStmt); */
+    /* } */
 
     clock_gettime(CLOCK_MONOTONIC, &sEndTime);
     double sElapsedSec = (double)(sEndTime.tv_sec - sStartTime.tv_sec) +
