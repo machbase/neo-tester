@@ -129,39 +129,48 @@ void printError(SQLHENV aEnv, SQLHDBC aCon, SQLHSTMT aStmt, char *aMsg)
 //#define SQL_STR  "select * from v$version limit 1"
 //#define SQL_STR  "commit"
 
-int directExecute2(SQLHSTMT aStmt, int aPrint)
-{
-    const char *sSQL = SQL_STR;
-
-    SQLLEN      sIdLen      = 0;
-    SQLLEN      sValueLen   = 0;
-    SQLLEN      sRegDateLen = 0;
-
-    char                 sId[33];
-    double               sValue;
+struct fetch_buffer {
+    SQLLEN      sIdLen;
+    SQLLEN      sValueLen;
+    SQLLEN      sRegDateLen;
+    char        sId[33];
+    double      sValue;
     SQL_TIMESTAMP_STRUCT sRegDate;
+};
 
-    if( SQLExecDirect(aStmt, (SQLCHAR *)sSQL, SQL_NTS) != SQL_SUCCESS )
-    {
-        printError(gEnv, gCon, aStmt, "SQLExecDirect Error");
-        goto error;
-    }
-
-    if( SQLBindCol(aStmt, 1, SQL_C_CHAR, sId, sizeof(sId), &sIdLen) != SQL_SUCCESS )
+int bindFetchColumns(SQLHSTMT aStmt, struct fetch_buffer *aFetch)
+{
+    if( SQLBindCol(aStmt, 1, SQL_C_CHAR, aFetch->sId, sizeof(aFetch->sId), &aFetch->sIdLen) != SQL_SUCCESS )
     {
         printError(gEnv, gCon, aStmt, "SQLBindCol 1 Error");
         goto error;
     }
 
-    if( SQLBindCol(aStmt, 2, SQL_C_TYPE_TIMESTAMP, &sRegDate, 0, &sRegDateLen) != SQL_SUCCESS )
+    if( SQLBindCol(aStmt, 2, SQL_C_TYPE_TIMESTAMP, &aFetch->sRegDate, 0, &aFetch->sRegDateLen) != SQL_SUCCESS )
     {
         printError(gEnv, gCon, aStmt, "SQLBindCol 2 Error");
         goto error;
     }
 
-    if( SQLBindCol(aStmt, 3, SQL_C_DOUBLE, &sValue, 0, &sValueLen) != SQL_SUCCESS )
+    if( SQLBindCol(aStmt, 3, SQL_C_DOUBLE, &aFetch->sValue, 0, &aFetch->sValueLen) != SQL_SUCCESS )
     {
         printError(gEnv, gCon, aStmt, "SQLBindCol 3 Error");
+        goto error;
+    }
+
+    return 0;
+
+error:
+    return -1;
+}
+
+int directExecute2(SQLHSTMT aStmt, int aPrint, struct fetch_buffer *aFetch)
+{
+    const char *sSQL = SQL_STR;
+
+    if( SQLExecDirect(aStmt, (SQLCHAR *)sSQL, SQL_NTS) != SQL_SUCCESS )
+    {
+        printError(gEnv, gCon, aStmt, "SQLExecDirect Error");
         goto error;
     }
 
@@ -176,11 +185,11 @@ int directExecute2(SQLHSTMT aStmt, int aPrint)
     {
         if (aPrint != 0)
         {
-            printf("%-33s", sId);
+            printf("%-33s", aFetch->sId);
             printf("%d-%02d-%02d %02d:%02d:%02d 000:000:000 ",
-                        sRegDate.year, sRegDate.month, sRegDate.day,
-                        sRegDate.hour, sRegDate.minute, sRegDate.second);
-            printf("%-.2lf", sValue);
+                        aFetch->sRegDate.year, aFetch->sRegDate.month, aFetch->sRegDate.day,
+                        aFetch->sRegDate.hour, aFetch->sRegDate.minute, aFetch->sRegDate.second);
+            printf("%-.2lf", aFetch->sValue);
 
             printf("\n");
         }
@@ -198,37 +207,11 @@ error:
     return -1;
 }
 
-int prepareExecute(SQLHSTMT aStmt, int aPrint)
+int prepareExecute(SQLHSTMT aStmt, int aPrint, struct fetch_buffer *aFetch)
 {
-    SQLLEN      sIdLen      = 0;
-    SQLLEN      sValueLen   = 0;
-    SQLLEN      sRegDateLen = 0;
-
-    char                 sId[33];
-    double               sValue;
-    SQL_TIMESTAMP_STRUCT sRegDate;
-
     if( SQLExecute(aStmt) != SQL_SUCCESS )
     {
         printError(gEnv, gCon, aStmt, "SQLExecute Error");
-        goto error;
-    }
-
-    if( SQLBindCol(aStmt, 1, SQL_C_CHAR, sId, sizeof(sId), &sIdLen) != SQL_SUCCESS )
-    {
-        printError(gEnv, gCon, aStmt, "SQLBindCol 1 Error");
-        goto error;
-    }
-
-    if( SQLBindCol(aStmt, 2, SQL_C_TYPE_TIMESTAMP, &sRegDate, 0, &sRegDateLen) != SQL_SUCCESS )
-    {
-        printError(gEnv, gCon, aStmt, "SQLBindCol 2 Error");
-        goto error;
-    }
-
-    if( SQLBindCol(aStmt, 3, SQL_C_DOUBLE, &sValue, 0, &sValueLen) != SQL_SUCCESS )
-    {
-        printError(gEnv, gCon, aStmt, "SQLBindCol 3 Error");
         goto error;
     }
 
@@ -243,11 +226,11 @@ int prepareExecute(SQLHSTMT aStmt, int aPrint)
     {
         if (aPrint != 0)
         {
-            printf("%-33s", sId);
+            printf("%-33s", aFetch->sId);
             printf("%d-%02d-%02d %02d:%02d:%02d 000:000:000 ",
-                        sRegDate.year, sRegDate.month, sRegDate.day,
-                        sRegDate.hour, sRegDate.minute, sRegDate.second);
-            printf("%-.2lf", sValue);
+                        aFetch->sRegDate.year, aFetch->sRegDate.month, aFetch->sRegDate.day,
+                        aFetch->sRegDate.hour, aFetch->sRegDate.minute, aFetch->sRegDate.second);
+            printf("%-.2lf", aFetch->sValue);
 
             printf("\n");
         }
@@ -280,6 +263,9 @@ void *run_thread(void *arg)
     struct timespec sStartTime;
     struct timespec sEndTime;
     SQLHSTMT sStmt;
+    struct fetch_buffer sFetch;
+
+    memset(&sFetch, 0, sizeof(sFetch));
 
     db_connect(args->host, args->port);
     clock_gettime(CLOCK_MONOTONIC, &sStartTime);
@@ -297,15 +283,20 @@ void *run_thread(void *arg)
         }
     }
 
+    if (bindFetchColumns(sStmt, &sFetch) != 0)
+    {
+        outError("BindCol", sStmt);
+    }
+
     for (int i = 0; i < args->test_num; i++)
     {
         if (args->use_prepare)
         {
-            prepareExecute(sStmt, args->print_rows);
+            prepareExecute(sStmt, args->print_rows, &sFetch);
         }
         else
         {
-            directExecute2(sStmt, args->print_rows);
+            directExecute2(sStmt, args->print_rows, &sFetch);
         }
     }
 
