@@ -100,7 +100,7 @@ func main() {
 			<-startCh
 			var conn *machcli.Conn
 
-			if c, err := db.Connect(ctx, api.WithPassword("sys", "manager")); err != nil {
+			if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
 				panic(err)
 			} else {
 				conn = c.(*machcli.Conn)
