@@ -43,7 +43,6 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
-	var start = time.Now()
 	db, err := machcli.NewDatabase(&machcli.Config{
 		Host:         host,
 		Port:         port,
@@ -89,6 +88,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	var start = time.Now()
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
 

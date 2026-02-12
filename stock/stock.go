@@ -29,6 +29,7 @@ func main() {
 	var doOSThreadLock = false
 	var doCreateData = false
 	var doPreparedStmt = false
+	var doRollupQuery = false
 	var sessionElapsed []time.Duration
 	var host = "127.0.0.1"
 	var port = 5656
@@ -48,6 +49,8 @@ func main() {
 	flag.IntVar(&port, "p", port, "server port")
 	flag.StringVar(&user, "u", user, "user")
 	flag.StringVar(&password, "P", password, "password")
+	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
+	flag.BoolVar(&doRollupQuery, "rollup", doRollupQuery, "perform rollup query instead of tick query")
 	flag.StringVar(&code, "code", code, "stock code (tag) to insert/query")
 	flag.StringVar(&csvPath, "csv", csvPath, "local CSV file path to load when -create")
 	flag.StringVar(&csvURL, "csv-url", csvURL, "CSV URL to download when -create (ex: https://stooq.com/q/d/l/?s=aapl.us&i=5)")
@@ -57,11 +60,9 @@ func main() {
 	flag.BoolVar(&doOSThreadLock, "T", doOSThreadLock, "enable OS thread lock")
 	flag.BoolVar(&doCpuProfile, "prof", doCpuProfile, "enable cpu profiling")
 	flag.BoolVar(&doCreateData, "create", doCreateData, "create initial data")
-	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.Parse()
 
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
-	var start = time.Now()
 	db, err := machcli.NewDatabase(&machcli.Config{
 		Host:         host,
 		Port:         port,
@@ -175,6 +176,7 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	var start = time.Now()
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
 
@@ -201,10 +203,18 @@ func main() {
 			defer func() {
 				sessionElapsed[clientId] = time.Since(clientStart)
 			}()
-			if doPreparedStmt {
-				RunPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-30"})
+			if doRollupQuery {
+				if doPreparedStmt {
+					RunRollupPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-30"})
+				} else {
+					RunRollupQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-30"})
+				}
 			} else {
-				RunQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-30"})
+				if doPreparedStmt {
+					RunPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-15"})
+				} else {
+					RunQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-15"})
+				}
 			}
 		}(ctx, i)
 	}
@@ -240,6 +250,118 @@ type Query struct {
 }
 
 func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, q Query) {
+	for j := 0; j < nCount; j++ {
+		tick := time.Now()
+		r, err := conn.Query(ctx, `
+			select code,
+				time,
+				price,
+				volume,
+				bid_price,
+				ask_price
+			from stock_tick
+			where code = ?
+			and time between ? and ?
+			order by time
+			limit ?`, q.code, q.betweenFrom, q.betweenTo, q.nFetch)
+		if err != nil {
+			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+		rows := r.(*machcli.Rows)
+		n := 0
+		for rows.Next() {
+			if err := rows.Err(); err != nil {
+				panic(err)
+			}
+			n++
+			var name string
+			var t time.Time
+			var avgPrice float64
+			var totalVolume float64
+			var avgBid float64
+			var avgAsk float64
+			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+				panic(err)
+			}
+			if name != q.code {
+				panic(fmt.Sprintf("invalid name: %s", name))
+			}
+		}
+		if err := rows.Err(); err != nil {
+			panic(err)
+		}
+		tick = time.Now()
+		err = rows.Close()
+		if err != nil {
+			fmt.Printf("Close error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+	}
+}
+
+func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
+	var stmt *machcli.PreparedStmt
+	if s, err := conn.Prepare(ctx, `
+			select code,
+				time,
+				price,
+				volume,
+				bid_price,
+				ask_price
+			from stock_tick
+			where code = ?
+			and time between ? and ?
+			order by time
+			limit ?`); err != nil {
+		panic(err)
+	} else {
+		stmt = s.(*machcli.PreparedStmt)
+	}
+	defer func() {
+		if err := stmt.Close(); err != nil {
+			panic(err)
+		}
+	}()
+	for j := 0; j < nCount; j++ {
+		tick := time.Now()
+		r, err := stmt.Query(ctx, q.code, q.betweenFrom, q.betweenTo, q.nFetch)
+		if err != nil {
+			fmt.Printf("Query error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+		rows := r.(*machcli.Rows)
+		n := 0
+		for rows.Next() {
+			if err := rows.Err(); err != nil {
+				panic(err)
+			}
+			n++
+			var name string
+			var t time.Time
+			var avgPrice float64
+			var totalVolume float64
+			var avgBid float64
+			var avgAsk float64
+			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+				panic(err)
+			}
+			if name != q.code {
+				panic(fmt.Sprintf("invalid name: %s", name))
+			}
+		}
+		if err := rows.Err(); err != nil {
+			panic(err)
+		}
+		tick = time.Now()
+		if err = rows.Close(); err != nil {
+			fmt.Printf("Close error(3), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+	}
+}
+
+func RunRollupQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
 		r, err := conn.Query(ctx, `
@@ -291,7 +413,7 @@ func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int,
 	}
 }
 
-func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
+func RunRollupPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
 	var stmt *machcli.PreparedStmt
 	if s, err := conn.Prepare(ctx, `
 			select code,
