@@ -119,16 +119,18 @@ func main() {
 			defer func() {
 				sessionElapsed[clientId] = time.Since(clientStart)
 			}()
-			timeTo := time.Now()
-			timeFrom := timeTo.Add(-time.Duration(1 * time.Minute))
 
 			if doRollupQuery {
+				timeTo := time.Now()
+				timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
 				if doPreparedStmt {
 					RunRollupPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				} else {
 					RunRollupQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				}
 			} else {
+				timeTo := time.Now()
+				timeFrom := timeTo.Add(-time.Duration(1 * time.Minute))
 				if doPreparedStmt {
 					RunPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				} else {
