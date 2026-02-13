@@ -33,6 +33,7 @@ func main() {
 	flag.StringVar(&password, "P", password, "password")
 	flag.Float64Var(&appendTps, "tps", appendTps, "append TPS (5 = 20ms interval)")
 	flag.Parse()
+
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
 	db, err := machcli.NewDatabase(&machcli.Config{
 		Host:         host,
@@ -44,7 +45,13 @@ func main() {
 		panic(err)
 	}
 	defer db.Close()
+
 	ctx := context.Background()
+
+	// create tables if not exists
+	CreateTablesIfNotExists(ctx, db)
+
+	// start appending data
 	if appendTps > 0 {
 		stopFunc := AppendData(ctx, db, appendTps)
 		defer stopFunc()
@@ -178,7 +185,7 @@ func (dg *DataGenerator) Start(callback func(Data)) {
 		select {
 		case <-dg.stopChan:
 			return
-		case tickTime := <-ticker.C:
+		case timeTick := <-ticker.C:
 			// Calculate how many data points to generate in this tick
 			count := int(tickInterval / baseInterval)
 			remainder := float64(tickInterval%baseInterval) / float64(baseInterval)
@@ -232,12 +239,7 @@ func (dg *DataGenerator) Start(callback func(Data)) {
 				}
 				ask := price + spread/2
 
-				// Distribute timestamps within the tick interval
-				offset := time.Duration(i) * baseInterval
-				if offset > tickInterval {
-					offset = tickInterval
-				}
-				timestamp := tickTime.Add(-tickInterval + offset)
+				timestamp := timeTick.Add(time.Duration(i))
 
 				callback(Data{
 					Timestamp: timestamp,
@@ -270,4 +272,57 @@ func randomizedInterval(rnd *rand.Rand, base time.Duration) time.Duration {
 	max := jitter
 	span := int64(max-min) + 1
 	return base + time.Duration(rnd.Int63n(span)+int64(min))
+}
+
+func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
+	conn, err := db.Connect(ctx, api.WithPassword(user, password))
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	result := conn.Exec(ctx, `create tag table if not exists stock_tick (
+									code      varchar(20) primary key,
+									time      datetime basetime,
+									price     double,
+									volume    double,
+									bid_price double,
+									ask_price double
+								)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1m (
+									code      varchar(20) primary key,
+									time      datetime basetime,
+									sum_price double,
+									sum_volume double,
+									sum_bid   double,
+									sum_ask   double,
+									cnt       integer
+								)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create rollup rollup_stock_1m
+								into (stock_rollup_1m)
+								as (
+									select code,
+											date_trunc('minute', time) as time,
+											sum(price) as sum_price,
+											sum(volume) as sum_volume,
+											sum(bid_price) as sum_bid,
+											sum(ask_price) as sum_ask,
+											count(*) as cnt
+										from stock_tick
+									group by code, time
+								)
+								interval 1 min`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	// result = conn.Exec(ctx, `exec rollup_force(rollup_stock_1m)`)
+	// if result.Err() != nil {
+	// 	panic(result.Err())
+	// }
 }
