@@ -29,6 +29,7 @@ var doOSThreadLock = false
 var doCreateData = false
 var doPreparedStmt = false
 var doRollupQuery = false
+var doAppendDataTPS = float64(0)
 var sessionElapsed []time.Duration
 var host = "127.0.0.1"
 var port = 5656
@@ -60,6 +61,7 @@ func main() {
 	flag.BoolVar(&doOSThreadLock, "T", doOSThreadLock, "enable OS thread lock")
 	flag.BoolVar(&doCpuProfile, "prof", doCpuProfile, "enable cpu profiling")
 	flag.BoolVar(&doCreateData, "create", doCreateData, "create initial data")
+	flag.Float64Var(&doAppendDataTPS, "append", doAppendDataTPS, "append data in TPS (0 to disable, 5 = 20ms interval)")
 	flag.Parse()
 
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
@@ -77,6 +79,10 @@ func main() {
 	ctx := context.Background()
 	if doCreateData {
 		CreateData(ctx, db)
+	}
+	if doAppendDataTPS > 0 {
+		stopFunc := AppendData(ctx, db, doAppendDataTPS)
+		defer stopFunc()
 	}
 	sessionElapsed = make([]time.Duration, nClient)
 	var startCh = make(chan struct{})
