@@ -29,7 +29,6 @@ var doOSThreadLock = false
 var doCreateData = false
 var doPreparedStmt = false
 var doRollupQuery = false
-var doAppendDataTPS = float64(0)
 var sessionElapsed []time.Duration
 var host = "127.0.0.1"
 var port = 5656
@@ -61,7 +60,6 @@ func main() {
 	flag.BoolVar(&doOSThreadLock, "T", doOSThreadLock, "enable OS thread lock")
 	flag.BoolVar(&doCpuProfile, "prof", doCpuProfile, "enable cpu profiling")
 	flag.BoolVar(&doCreateData, "create", doCreateData, "create initial data")
-	flag.Float64Var(&doAppendDataTPS, "append", doAppendDataTPS, "append data in TPS (0 to disable, 5 = 20ms interval)")
 	flag.Parse()
 
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
@@ -79,10 +77,6 @@ func main() {
 	ctx := context.Background()
 	if doCreateData {
 		CreateData(ctx, db)
-	}
-	if doAppendDataTPS > 0 {
-		stopFunc := AppendData(ctx, db, doAppendDataTPS)
-		defer stopFunc()
 	}
 	sessionElapsed = make([]time.Duration, nClient)
 	var startCh = make(chan struct{})
@@ -125,17 +119,20 @@ func main() {
 			defer func() {
 				sessionElapsed[clientId] = time.Since(clientStart)
 			}()
+			timeTo := time.Now()
+			timeFrom := timeTo.Add(-time.Duration(1 * time.Minute))
+
 			if doRollupQuery {
 				if doPreparedStmt {
-					RunRollupPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-30"})
+					RunRollupPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				} else {
-					RunRollupQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-30"})
+					RunRollupQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				}
 			} else {
 				if doPreparedStmt {
-					RunPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-15"})
+					RunPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				} else {
-					RunQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: "1986-04-10", betweenTo: "1986-04-15"})
+					RunQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				}
 			}
 		}(ctx, i)
@@ -260,8 +257,8 @@ func CreateData(ctx context.Context, db api.Database) {
 type Query struct {
 	code        string
 	nFetch      int
-	betweenFrom string
-	betweenTo   string
+	betweenFrom time.Time
+	betweenTo   time.Time
 }
 
 func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, q Query) {

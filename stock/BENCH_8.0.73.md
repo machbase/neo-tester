@@ -40,7 +40,7 @@
 ## Test Env
 - Date: 2026/02/12
 
-- server (linux 32 cores) --+ 
+- server (linux 36 cores) --+ 
                             | 1G Net
 - client (linux 12 cores) --+ 
 
@@ -91,7 +91,7 @@
 
 ## Test Env
 
-- server (linux 32 cores) --+ Loopback
+- server (linux 36 cores) --+ Loopback
 
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
@@ -110,7 +110,7 @@
 |v8.0.73-rc2| stock-tick   |      1  |   10,000   |  1,115/s |      s     |       s    |       s     |
 |           |              |      8  |   10,000   |  6,439/s |      s     |       s    |       s     |
 |           |              |     16  |   10,000   | 10,073/s |      s     |       s    |       s     |
-|           |              |     32  |   10,000   |       /s |      s     |       s    |       s     |
+|           |              |     32  |   10,000   | 10,427/s |      s     |       s    |       s     |
 |           |              |     64  |   10,000   |       /s |      s     |       s    |       s     |
 |           |              |    128  |   10,000   |       /s |      s     |       s    |       s     |
 |           |              |    256  |   10,000   |       /s |      s     |       s    |       s     |

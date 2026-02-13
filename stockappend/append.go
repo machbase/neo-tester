@@ -2,19 +2,67 @@ package main
 
 import (
 	"context"
+	_ "embed"
+	"flag"
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"os/signal"
+	"strings"
 	"sync"
+	"syscall"
 	"time"
 
+	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
 	"github.com/machbase/neo-server/v8/api/machcli"
 )
 
+var host = "127.0.0.1"
+var port = 5656
+var user = "sys"
+var password = "manager"
+var appendTps = float64(1000) // 1000 TPS
+
+// Usage: go run ./stockappend -tps <tps> -h <host> -p <port> -u <user> -P <password>
+func main() {
+	flag.StringVar(&host, "h", host, "server host")
+	flag.IntVar(&port, "p", port, "server port")
+	flag.StringVar(&user, "u", user, "user")
+	flag.StringVar(&password, "P", password, "password")
+	flag.Float64Var(&appendTps, "tps", appendTps, "append TPS (5 = 20ms interval)")
+	flag.Parse()
+	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
+	db, err := machcli.NewDatabase(&machcli.Config{
+		Host:         host,
+		Port:         port,
+		MaxOpenConn:  -1,
+		MaxOpenQuery: -1,
+	})
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+	ctx := context.Background()
+	if appendTps > 0 {
+		stopFunc := AppendData(ctx, db, appendTps)
+		defer stopFunc()
+	}
+	interruptSignal := make(chan os.Signal, 1)
+	signal.Notify(interruptSignal, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+	fmt.Println("Press Ctrl+C to stop...")
+	<-interruptSignal
+	fmt.Println("Stopping...")
+}
+
+//go:embed stock_codes.txt
+var codesTxt string
+
 func AppendData(ctx context.Context, db *machcli.Database, tps float64) func() {
+	codes := strings.Split(codesTxt, "\n")
 	interval := time.Duration(float64(time.Second) / tps)
-	gen := NewDataGenerator([]string{"AAPL", "GOOG", "MSFT"}, interval)
+	gen := NewDataGenerator(codes, interval)
 
 	var conn *machcli.Conn
 	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
