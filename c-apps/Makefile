@@ -4,7 +4,7 @@
 include $(MACHBASEDEV_HOME)/test/itf/itf.mk
 
 INCLUDES  += $(MACHBASE_HOME)/include $(NBASIS_HOME)/include $(MACHBASEDEV_HOME)/test/itf
-LIBS      += nbasistest machbaseuta machbasecli
+LIBS      += jemalloc nbasistest machbaseuta machbasecli
 LIBDIRS   += $(MACHBASE_HOME)/lib $(NBASIS_HOME)/lib$(COMPILE_BIT)
 DEFINES   += NBP_CFG_DL_STATIC
 
