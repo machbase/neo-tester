@@ -255,12 +255,6 @@ int directExecute2(SQLHSTMT aStmt, int aPrint, struct fetch_buffer *aFetch)
         }
     }
 
-    /* if( SQLFreeStmt(aStmt, SQL_CLOSE) != SQL_SUCCESS ) */
-    /* { */
-    /*     printError(gEnv, gCon, aStmt, "SQLFreeStmt Error"); */
-    /*     goto error; */
-    /* } */
-
     return 0;
 
 error:
@@ -296,12 +290,6 @@ int prepareExecute(SQLHSTMT aStmt, int aPrint, struct fetch_buffer *aFetch)
         }
     }
 
-    /* if( SQLFreeStmt(aStmt, SQL_CLOSE) != SQL_SUCCESS ) */
-    /* { */
-    /*     printError(gEnv, gCon, aStmt, "SQLFreeStmt(SQL_CLOSE) Error"); */
-    /*     goto error; */
-    /* } */
-
     return 0;
 
 error:
@@ -332,11 +320,6 @@ void *run_thread(void *arg)
     db_connect(args->host, args->port);
     clock_gettime(CLOCK_MONOTONIC, &sStartTime);
 
-    if (SQLAllocStmt(gCon, &sStmt) == SQL_ERROR)
-    {
-        outError("AllocStmt", sStmt);
-    }
-
     snprintf(sPrepareParam.sTagName, sizeof(sPrepareParam.sTagName), "%s", PREPARE_TAG_NAME);
     snprintf(sPrepareParam.sStartTime, sizeof(sPrepareParam.sStartTime), "%s", PREPARE_START_TIME);
     snprintf(sPrepareParam.sEndTime, sizeof(sPrepareParam.sEndTime), "%s", PREPARE_END_TIME);
@@ -346,30 +329,46 @@ void *run_thread(void *arg)
     sPrepareParam.sLimitCount = PREPARE_LIMIT_COUNT;
     sPrepareParam.sLimitCountLen = 0;
 
-    if (args->prepare_mode == 1)
-    {
-        if (SQLPrepare(sStmt, (SQLCHAR *)SQL_STR, SQL_NTS) == SQL_ERROR)
-        {
-            outError("Prepare error", sStmt);
-        }
-    }
-
-    if (bindFetchColumns(sStmt, &sFetch) != 0)
-    {
-        outError("BindCol", sStmt);
-    }
-
     for (int i = 0; i < args->test_num; i++)
     {
         if (args->prepare_mode == 1)
         {
+            if (SQLAllocStmt(gCon, &sStmt) == SQL_ERROR)
+            {
+                outError("AllocStmt", sStmt);
+            }
+
+            if (SQLPrepare(sStmt, (SQLCHAR *)SQL_STR, SQL_NTS) == SQL_ERROR)
+            {
+                outError("Prepare error", sStmt);
+            }
+            if (bindFetchColumns(sStmt, &sFetch) != 0)
+            {
+                outError("BindCol", sStmt);
+            }
+
             prepareExecute(sStmt, args->print_rows, &sFetch);
+
+            if (SQLFreeStmt(sStmt, SQL_DROP) == SQL_ERROR)
+            {
+                outError("FreeStmt(SQL_CLOSE)", sStmt);
+            }
         }
         else if (args->prepare_mode == 2)
         {
+            if (SQLAllocStmt(gCon, &sStmt) == SQL_ERROR)
+            {
+                outError("AllocStmt", sStmt);
+            }
+
             if (SQLPrepare(sStmt, (SQLCHAR *)PREPARE_SQL_STR, SQL_NTS) == SQL_ERROR)
             {
                 outError("Prepare error", sStmt);
+            }
+
+            if (bindFetchColumns(sStmt, &sFetch) != 0)
+            {
+                outError("BindCol", sStmt);
             }
 
             if (bindPrepareParameters(sStmt, &sPrepareParam) != 0)
@@ -379,14 +378,29 @@ void *run_thread(void *arg)
 
             prepareExecute(sStmt, args->print_rows, &sFetch);
 
-            /* if (SQLFreeStmt(sStmt, SQL_CLOSE) == SQL_ERROR) */
-            /* { */
-            /*     outError("FreeStmt(SQL_CLOSE)", sStmt); */
-            /* } */
+            if (SQLFreeStmt(sStmt, SQL_DROP) == SQL_ERROR)
+            {
+                outError("FreeStmt(SQL_CLOSE)", sStmt);
+            }
         }
         else
         {
+            if (SQLAllocStmt(gCon, &sStmt) == SQL_ERROR)
+            {
+                outError("AllocStmt", sStmt);
+            }
+
+            if (bindFetchColumns(sStmt, &sFetch) != 0)
+            {
+                outError("BindCol", sStmt);
+            }
+
             directExecute2(sStmt, args->print_rows, &sFetch);
+
+            if (SQLFreeStmt(sStmt, SQL_DROP) == SQL_ERROR)
+            {
+                outError("FreeStmt(SQL_CLOSE)", sStmt);
+            }
         }
     }
 
