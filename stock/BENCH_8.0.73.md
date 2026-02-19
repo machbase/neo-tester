@@ -78,6 +78,18 @@
 |           |              |    128  |   10,000   |       /s |  26.9s     |   28.2s    |   27.7s     |
 |           |              |    512  |   10,000   |       /s |  1m41s     |   1m51s    |   1m49s     |
 
+`go run -tags debug ./stock -c <clients> -n <per client> -h <ip> -code WISH`
+*2026/02/19 jemalloc version*
+| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
+|-----------|--------------|---------|------------|----------|------------|------------|-------------|
+|v8.0.73-rc3| stock-tick   |      1  |   10,000   |  1,795/s |   5.5s     |    5.5s    |    5.5s     |
+| +jemalloc |              |      8  |   10,000   | 12,794/s |   5.8s     |    6.2s    |    6.1s     |
+|           |              |     16  |   10,000   | 19,722/s |   7.0s     |    8.1s    |    7.4s     |
+|           |              |     32  |   10,000   | 31,824/s |   9.1s     |   10.0s    |    9.7s     |
+|           |              |     64  |   10,000   | 44,018/s |  13.1s     |   14.5s    |   13.5s     |
+|           |              |    128  |   10,000   | 46,445/s |  25.9s     |   27.5s    |   26.8s     |
+|           |              |    512  |   10,000   | 40,049/s |  1m32s     |   2m07s    |   1m45s     |
+
 `go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -rollup`
 *2026/02/13 rollup bug fix*
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
@@ -88,7 +100,44 @@
 |           |              |     32  |   10,000   | 25,659/s |  19.2s     |   32.4s    |   27.0s     |
 |           |              |     64  |   10,000   | 34,542/s |  26.9s     |   32.4s    |   30.8s     |
 |           |              |    128  |   10,000   | 31,920/s |  59.5s     |   1m 6s    |   1m 4s     |
-|           |              |    512  |   10,000   | 38,926/s |  2m32s     |   2m53s    |   2.48s     |
+|           |              |    512  |   10,000   | 38,926/s |  2m32s     |   2m53s    |   2m48s     |
+
+`go run -tags debug ./stock -c <clients> -n <per client> -h <ip> -code WISH -rollup`
+*2026/02/19 jemalloc version*
+| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
+|-----------|--------------|---------|------------|----------|------------|------------|-------------|
+|v8.0.73-rc3| stock-tick   |      1  |   10,000   |  1,172/s |   8.5s     |    8.5s    |    8.5s     |
+| +jemalloc | rollup       |      8  |   10,000   |  7,370/s |   9.6s     |   10.8s    |   10.4s     |
+|           |              |     16  |   10,000   | 12,883/s |  10.5s     |   12.4s    |   11.4s     |
+|           |              |     32  |   10,000   | 21,159/s |  14.0s     |   15.1s    |   14.6s     |
+|           |              |     64  |   10,000   | 39,433/s |  15.2s     |   16.2s    |   15.8s     |
+|           |              |    128  |   10,000   | 24,248/s |  49.6s     |   52.7s    |   51.9s     |
+|           |              |    512  |   10,000   | 34,303/s |  2m13s     |   2m29s    |   2m26s     |
+
+`GOEXPERIMENT=greenteagc go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -rollup`
+*2026/02/19 greentea gc*
+| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
+|-----------|--------------|---------|------------|----------|------------|------------|-------------|
+|v8.0.73-rc3| stock-tick   |      1  |   10,000   |  1,251/s |   7.9s     |    7.9s    |    7.9s     |
+| +greentea | rollup       |      8  |   10,000   |  9,686/s |   7.7s     |    8.2s    |    7.9s     |
+|           |              |     16  |   10,000   | 16,864/s |   8.7s     |    9.4s    |    9.0s     |
+|           |              |     32  |   10,000   | 26,860/s |  11.3s     |   11.9s    |   11.6s     |
+|           |              |     64  |   10,000   | 36,594/s |  16.5s     |   17.4s    |   17.1s     |
+|           |              |    128  |   10,000   | 35,284/s |  34.0s     |   36.2s    |   35.6s     |
+|           |              |    512  |   10,000   | 44,262/s |  1m45s     |   1m55s    |   1m53s     |
+
+
+`GOEXPERIMENT=greenteagc go run -tags debug ./stock -c <clients> -n <per client> -h <ip> -code WISH -rollup`
+*2026/02/19 jemalloc version + greentea gc*
+| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
+|-----------|--------------|---------|------------|----------|------------|------------|-------------|
+|v8.0.73-rc3| stock-tick   |      1  |   10,000   |  1,142/s |   8.7s     |    8.7s    |    8.7s     |
+| +jemalloc | rollup       |      8  |   10,000   |  8,532/s |   9.0s     |    9.3s    |    9.1s     |
+| +greentea |              |     16  |   10,000   | 15,402/s |   9.3s     |   10.3s    |    9.9s     |
+|           |              |     32  |   10,000   | 23,539/s |  12.6s     |   13.5s    |   13.0s     |
+|           |              |     64  |   10,000   | 32,495/s |  18.4s     |   19.6s    |   19.3s     |
+|           |              |    128  |   10,000   | 30,786/s |  38.8s     |   41.5s    |   40.7s     |
+|           |              |    512  |   10,000   | 39,777/s |  1m52s     |   2m 8s    |   2m 5s     |
 
 --------------------------
 
