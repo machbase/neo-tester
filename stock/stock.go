@@ -13,6 +13,9 @@ import (
 	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
 	"github.com/machbase/neo-server/v8/api/machcli"
+	"github.com/machbase/neo-server/v8/mods/util/jemalloc"
+	"golang.org/x/text/language"
+	"golang.org/x/text/message"
 )
 
 var nClient = 50
@@ -71,6 +74,27 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
+	statClose := make(chan struct{})
+	go func() {
+		fmt.Printf("jemalloc enabled: %v\n", jemalloc.Enabled)
+		if !jemalloc.Enabled {
+			return
+		}
+		for {
+			select {
+			case <-statClose:
+				return
+			case <-time.After(5 * time.Second):
+				stat := &jemalloc.Stat{}
+				jemalloc.HeapStat(stat)
+				fmt.Printf("jemalloc stats: %s active %s, resident %s\n",
+					time.Now().Format("15:04:05"),
+					Bytes(stat.Active), Bytes(stat.Resident))
+				continue
+			}
+		}
+	}()
+
 	var start = time.Now()
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
@@ -120,6 +144,8 @@ func main() {
 	}
 	close(startCh)
 	wg.Wait()
+	close(statClose)
+
 	mode := "Query"
 	if doPreparedStmt {
 		mode = "Prepare"
@@ -373,4 +399,31 @@ func RunRollupPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nC
 			return
 		}
 	}
+}
+
+var (
+	defaultLang language.Tag = language.English
+)
+
+func Bytes(v int64) string {
+	p := message.NewPrinter(defaultLang)
+	f := float64(v)
+	u := ""
+	switch {
+	case v >= 1024*1024*1024*1024:
+		f = f / (1024 * 1024 * 1024 * 1024)
+		u = "TB"
+	case v >= 1024*1024*1024:
+		f = f / (1024 * 1024 * 1024)
+		u = "GB"
+	case v >= 1024*1024:
+		f = f / (1024 * 1024)
+		u = "MB"
+	case v >= 1024:
+		f = f / 1024
+		u = "KB"
+	default:
+		return p.Sprintf("%dB", v)
+	}
+	return p.Sprintf("%.1f%s", f, u)
 }
