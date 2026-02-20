@@ -30,14 +30,15 @@
 
 - stockbench result
 
+```
 goos: darwin
 goarch: arm64
 pkg: tester/stockbench
 cpu: Apple M5
 
 "github.com/machbase/neo-server/v8/api/machcli"
-
 BenchmarkSelect-10    	      86	  14861460 ns/op	   25010 B/op	    1543 allocs/op
 
 "github.com/machbase/neo-server/v8/api/machgo"
 BenchmarkSelect-10    	     228	   4730629 ns/op	   30324 B/op	     475 allocs/op
+```

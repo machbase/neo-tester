@@ -16,7 +16,7 @@ import (
 
 	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
-	machcli "github.com/machbase/neo-server/v8/api/machgo"
+	"github.com/machbase/neo-server/v8/api/machgo"
 )
 
 var host = "127.0.0.1"
@@ -35,7 +35,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
-	db, err := machcli.NewDatabase(&machcli.Config{
+	db, err := machgo.NewDatabase(&machgo.Config{
 		Host:         host,
 		Port:         port,
 		MaxOpenConn:  -1,
@@ -66,16 +66,16 @@ func main() {
 //go:embed stock_codes.txt
 var codesTxt string
 
-func AppendData(ctx context.Context, db *machcli.Database, tps float64) func() {
+func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 	codes := strings.Split(codesTxt, "\n")
 	interval := time.Duration(float64(time.Second) / tps)
 	gen := NewDataGenerator(codes, interval)
 
-	var conn *machcli.Conn
+	var conn *machgo.Conn
 	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
 		panic(err)
 	} else {
-		conn = c.(*machcli.Conn)
+		conn = c.(*machgo.Conn)
 	}
 
 	appender, err := conn.Appender(ctx, "stock_tick")
