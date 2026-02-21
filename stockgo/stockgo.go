@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"runtime/pprof"
 	"sync"
 	"time"
@@ -18,7 +19,7 @@ import (
 var nClient = 50
 var nCount = 1000
 var nFetch = 100
-var doCpuProfile = false
+var doProfile = false
 var doPreparedStmt = false
 var doRollupQuery = false
 var doReuseStmt = false
@@ -40,7 +41,7 @@ func main() {
 	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.BoolVar(&doRollupQuery, "rollup", doRollupQuery, "perform rollup query instead of tick query")
 	flag.StringVar(&code, "code", code, "stock code (tag) to insert/query")
-	flag.BoolVar(&doCpuProfile, "prof", doCpuProfile, "enable cpu profiling")
+	flag.BoolVar(&doProfile, "prof", doProfile, "enable profiling")
 	flag.BoolVar(&doReuseStmt, "reuse", doReuseStmt, "reuse prepared statement")
 	flag.Parse()
 
@@ -60,14 +61,27 @@ func main() {
 	var startCh = make(chan struct{})
 	var wg sync.WaitGroup
 
-	if doCpuProfile {
-		// go tool pprof -http=:8080 /tmp/query /tmp/cpu.prof
+	if doProfile {
+		// go tool pprof -http=:8080 /tmp/cpu.prof
 		cpu_prof, err := os.Create("/tmp/cpu.prof")
 		if err != nil {
 			panic(err)
 		}
 		pprof.StartCPUProfile(cpu_prof)
 		defer pprof.StopCPUProfile()
+
+		// go tool pprof -http=:8080 /tmp/mem.prof
+		mem_prof, err := os.Create("/tmp/mem.prof")
+		if err != nil {
+			panic(err)
+		}
+		defer func() {
+			runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(mem_prof); err != nil {
+				panic(err)
+			}
+			mem_prof.Close()
+		}()
 	}
 
 	var start = time.Now()
@@ -82,7 +96,7 @@ func main() {
 				api.WithPassword(user, password),
 			}
 			if doReuseStmt {
-				options = append(options, api.WithStatementCache(api.StatementCacheOn))
+				options = append(options, api.WithStatementCache(api.StatementCacheAuto))
 			}
 			if c, err := db.Connect(ctx, options...); err != nil {
 				panic(err)
