@@ -5,15 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"runtime/pprof"
 	"sync"
 	"time"
 
-	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
-	machcli "github.com/machbase/neo-server/v8/api/machgo"
-	"github.com/machbase/neo-server/v8/mods/util/jemalloc"
+	"github.com/machbase/neo-server/v8/api/machgo"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -22,9 +19,9 @@ var nClient = 50
 var nCount = 1000
 var nFetch = 100
 var doCpuProfile = false
-var doOSThreadLock = false
 var doPreparedStmt = false
 var doRollupQuery = false
+var doReuseStmt = false
 var sessionElapsed []time.Duration
 var host = "127.0.0.1"
 var port = 5656
@@ -43,12 +40,11 @@ func main() {
 	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.BoolVar(&doRollupQuery, "rollup", doRollupQuery, "perform rollup query instead of tick query")
 	flag.StringVar(&code, "code", code, "stock code (tag) to insert/query")
-	flag.BoolVar(&doOSThreadLock, "T", doOSThreadLock, "enable OS thread lock")
 	flag.BoolVar(&doCpuProfile, "prof", doCpuProfile, "enable cpu profiling")
+	flag.BoolVar(&doReuseStmt, "reuse", doReuseStmt, "reuse prepared statement")
 	flag.Parse()
 
-	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
-	db, err := machcli.NewDatabase(&machcli.Config{
+	db, err := machgo.NewDatabase(&machgo.Config{
 		Host:         host,
 		Port:         port,
 		MaxOpenConn:  -1,
@@ -74,43 +70,24 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	statClose := make(chan struct{})
-	go func() {
-		fmt.Printf("jemalloc enabled: %v\n", jemalloc.Enabled)
-		if !jemalloc.Enabled {
-			return
-		}
-		for {
-			select {
-			case <-statClose:
-				return
-			case <-time.After(5 * time.Second):
-				stat := &jemalloc.Stat{}
-				jemalloc.HeapStat(stat)
-				fmt.Printf("jemalloc stats: %s active %s, resident %s\n",
-					time.Now().Format("15:04:05"),
-					Bytes(stat.Active), Bytes(stat.Resident))
-				continue
-			}
-		}
-	}()
-
 	var start = time.Now()
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
 
 		go func(ctx context.Context, clientId int) {
 			defer wg.Done()
-			if doOSThreadLock {
-				runtime.LockOSThread()
-			}
 			<-startCh
-			var conn *machcli.Conn
-
-			if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+			var conn *machgo.Conn
+			var options = []api.ConnectOption{
+				api.WithPassword(user, password),
+			}
+			if doReuseStmt {
+				options = append(options, api.WithStatementCache(api.StatementCacheOn))
+			}
+			if c, err := db.Connect(ctx, options...); err != nil {
 				panic(err)
 			} else {
-				conn = c.(*machcli.Conn)
+				conn = c.(*machgo.Conn)
 			}
 			defer func() {
 				err := conn.Close()
@@ -144,7 +121,6 @@ func main() {
 	}
 	close(startCh)
 	wg.Wait()
-	close(statClose)
 
 	mode := "Query"
 	if doPreparedStmt {
@@ -175,7 +151,7 @@ type Query struct {
 	betweenTo   time.Time
 }
 
-func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, q Query) {
+func RunQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
 		r, err := conn.Query(ctx, `
@@ -194,7 +170,7 @@ func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int,
 			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machcli.Rows)
+		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -227,7 +203,7 @@ func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int,
 }
 
 func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
-	var stmt *machcli.PreparedStmt
+	var stmt *machgo.PreparedStmt
 	if s, err := conn.Prepare(ctx, `
 			select /*+ SCAN_FORWARD(stock_tick) */ code,
 				time,
@@ -242,7 +218,7 @@ func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount i
 			limit ?`); err != nil {
 		panic(err)
 	} else {
-		stmt = s.(*machcli.PreparedStmt)
+		stmt = s.(*machgo.PreparedStmt)
 	}
 	defer func() {
 		if err := stmt.Close(); err != nil {
@@ -256,7 +232,7 @@ func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount i
 			fmt.Printf("Query error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machcli.Rows)
+		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -287,7 +263,7 @@ func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount i
 	}
 }
 
-func RunRollupQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, q Query) {
+func RunRollupQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
 		r, err := conn.Query(ctx, `
@@ -307,7 +283,7 @@ func RunRollupQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCoun
 			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machcli.Rows)
+		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -340,7 +316,7 @@ func RunRollupQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCoun
 }
 
 func RunRollupPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
-	var stmt *machcli.PreparedStmt
+	var stmt *machgo.PreparedStmt
 	if s, err := conn.Prepare(ctx, `
 			select code,
 				time,
@@ -356,7 +332,7 @@ func RunRollupPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nC
 			limit ?`); err != nil {
 		panic(err)
 	} else {
-		stmt = s.(*machcli.PreparedStmt)
+		stmt = s.(*machgo.PreparedStmt)
 	}
 	defer func() {
 		if err := stmt.Close(); err != nil {
@@ -370,7 +346,7 @@ func RunRollupPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nC
 			fmt.Printf("Query error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machcli.Rows)
+		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
