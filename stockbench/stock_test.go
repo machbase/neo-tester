@@ -7,30 +7,79 @@ import (
 	"time"
 
 	"github.com/machbase/neo-server/v8/api"
+	"github.com/machbase/neo-server/v8/api/machcli"
 	"github.com/machbase/neo-server/v8/api/machgo"
 )
 
 var nFetch = 100
-var host = "192.168.0.90"
-var port = 51000
+var host = "127.0.0.1"
+var port = 5656
 var user = "sys"
 var password = "manager"
 var code = "WISH"
 
-// goos: darwin
-// goarch: arm64
-// pkg: tester/stockbench
-// cpu: Apple M5
-//
-// "github.com/machbase/neo-server/v8/api/machcli"
-// BenchmarkSelect-10    	      86	  14861460 ns/op	   25010 B/op	    1543 allocs/op
-//
-// "github.com/machbase/neo-server/v8/api/machgo"
-// BenchmarkSelect-10    	     228	   4730629 ns/op	   30324 B/op	     475 allocs/op
-
-func BenchmarkSelect(b *testing.B) {
+func BenchmarkSelect_MachCli(b *testing.B) {
 	ctx := context.Background()
+	conn, err := connectMachCli(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	benchSelect(b, ctx, conn)
+}
+
+func BenchmarkSelect_MachGo(b *testing.B) {
+	ctx := context.Background()
+	conn, err := connectMachGo(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	benchSelect(b, ctx, conn)
+}
+
+func BenchmarkSelectRollup_MachCli(b *testing.B) {
+	ctx := context.Background()
+	conn, err := connectMachCli(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	benchSelectRollup(b, ctx, conn)
+}
+
+func BenchmarkSelectRollup_MachGo(b *testing.B) {
+	ctx := context.Background()
+	conn, err := connectMachGo(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+	benchSelectRollup(b, ctx, conn)
+}
+
+func connectMachGo(ctx context.Context) (api.Conn, error) {
 	db, err := machgo.NewDatabase(&machgo.Config{
+		Host:           host,
+		Port:           port,
+		MaxOpenConn:    -1,
+		MaxOpenQuery:   -1,
+		StatementReuse: machgo.StatementReuseAuto,
+		FetchRows:      200,
+	})
+	if err != nil {
+		panic(err)
+	}
+
+	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+		panic(err)
+	} else {
+		return c, nil
+	}
+}
+
+func connectMachCli(ctx context.Context) (api.Conn, error) {
+	db, err := machcli.NewDatabase(&machcli.Config{
 		Host:         host,
 		Port:         port,
 		MaxOpenConn:  -1,
@@ -39,20 +88,21 @@ func BenchmarkSelect(b *testing.B) {
 	if err != nil {
 		panic(err)
 	}
-	defer db.Close()
 
-	var conn *machgo.Conn
 	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
 		panic(err)
 	} else {
-		conn = c.(*machgo.Conn)
-		defer conn.Close()
+		return c, nil
 	}
+}
 
+func benchSelectRollup(b *testing.B, ctx context.Context, conn api.Conn) {
 	timeTo := time.Now().Add(-time.Duration(2 * time.Minute))
 	timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
+	b.ReportAllocs()
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, err := conn.Query(ctx, `
+		rows, err := conn.Query(ctx, `
 			select /*+ SCAN_FORWARD(stock_rollup_1m) */ code,
 				time,
 				sum(sum_price) / sum(cnt) as avg_price,
@@ -68,7 +118,6 @@ func BenchmarkSelect(b *testing.B) {
 		if err != nil {
 			panic(err)
 		}
-		rows := r.(*machgo.Rows)
 		n := 0
 		var name string
 		var t time.Time
@@ -82,6 +131,53 @@ func BenchmarkSelect(b *testing.B) {
 			}
 			n++
 			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+				panic(err)
+			}
+			if name != code {
+				panic(fmt.Sprintf("invalid name: %s", name))
+			}
+		}
+		if err := rows.Err(); err != nil {
+			panic(err)
+		}
+		err = rows.Close()
+	}
+}
+
+func benchSelect(b *testing.B, ctx context.Context, conn api.Conn) {
+	timeTo := time.Now().Add(-time.Duration(2 * time.Minute))
+	timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rows, err := conn.Query(ctx, `
+			select code,
+				time,
+				price,
+				volume,
+				bid_price,
+				ask_price
+			from stock_tick
+			where code = ?
+			and time between ? and ?
+			order by time
+			limit ?`, code, timeFrom, timeTo, nFetch)
+		if err != nil {
+			panic(err)
+		}
+		n := 0
+		var name string
+		var t time.Time
+		var price float64
+		var volume float64
+		var bidPrice float64
+		var askPrice float64
+		for rows.Next() {
+			if err := rows.Err(); err != nil {
+				panic(err)
+			}
+			n++
+			if err := rows.Scan(&name, &t, &price, &volume, &bidPrice, &askPrice); err != nil {
 				panic(err)
 			}
 			if name != code {
