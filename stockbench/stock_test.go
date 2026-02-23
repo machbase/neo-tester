@@ -12,8 +12,8 @@ import (
 )
 
 var nFetch = 100
-var host = "127.0.0.1"
-var port = 5656
+var host = "192.168.0.90"
+var port = 51000
 var user = "sys"
 var password = "manager"
 var code = "WISH"
@@ -65,7 +65,7 @@ func connectMachGo(ctx context.Context) (api.Conn, error) {
 		MaxOpenConn:    -1,
 		MaxOpenQuery:   -1,
 		StatementReuse: machgo.StatementReuseAuto,
-		FetchRows:      200,
+		FetchRows:      1000,
 	})
 	if err != nil {
 		panic(err)
