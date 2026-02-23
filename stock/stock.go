@@ -13,7 +13,6 @@ import (
 	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
 	"github.com/machbase/neo-server/v8/api/machcli"
-	"github.com/machbase/neo-server/v8/mods/util/jemalloc"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -74,27 +73,6 @@ func main() {
 		defer pprof.StopCPUProfile()
 	}
 
-	statClose := make(chan struct{})
-	go func() {
-		fmt.Printf("jemalloc enabled: %v\n", jemalloc.Enabled)
-		if !jemalloc.Enabled {
-			return
-		}
-		for {
-			select {
-			case <-statClose:
-				return
-			case <-time.After(5 * time.Second):
-				stat := &jemalloc.Stat{}
-				jemalloc.HeapStat(stat)
-				fmt.Printf("jemalloc stats: %s active %s, resident %s\n",
-					time.Now().Format("15:04:05"),
-					Bytes(stat.Active), Bytes(stat.Resident))
-				continue
-			}
-		}
-	}()
-
 	var start = time.Now()
 	for i := 0; i < nClient; i++ {
 		wg.Add(1)
@@ -144,7 +122,6 @@ func main() {
 	}
 	close(startCh)
 	wg.Wait()
-	close(statClose)
 
 	mode := "Query"
 	if doPreparedStmt {
