@@ -24,6 +24,8 @@ var doPreparedStmt = false
 var doRollupQuery = false
 var doReuseStmt = false
 var sessionElapsed []time.Duration
+var sessionReadBytes []uint64
+var sessionWrittenBytes []uint64
 var host = "127.0.0.1"
 var port = 5656
 var user = "sys"
@@ -58,6 +60,8 @@ func main() {
 
 	ctx := context.Background()
 	sessionElapsed = make([]time.Duration, nClient)
+	sessionReadBytes = make([]uint64, nClient)
+	sessionWrittenBytes = make([]uint64, nClient)
 	var startCh = make(chan struct{})
 	var wg sync.WaitGroup
 
@@ -94,6 +98,7 @@ func main() {
 			var conn *machgo.Conn
 			var options = []api.ConnectOption{
 				api.WithPassword(user, password),
+				api.WithIOMetrics(true),
 			}
 			if doReuseStmt {
 				options = append(options, api.WithStatementCache(api.StatementCacheAuto))
@@ -111,7 +116,13 @@ func main() {
 			}()
 			clientStart := time.Now()
 			defer func() {
-				sessionElapsed[clientId] = time.Since(clientStart)
+				elapsed := time.Since(clientStart)
+				sessionElapsed[clientId] = elapsed
+				readBytes, writtenBytes, enabled := conn.IOMetrics()
+				if enabled {
+					sessionReadBytes[clientId] = readBytes
+					sessionWrittenBytes[clientId] = writtenBytes
+				}
 			}()
 
 			if doRollupQuery {
@@ -156,6 +167,30 @@ func main() {
 	}
 	avgSessionElapsed := time.Duration(int64(totalSessionElapsed) / int64(nClient))
 	fmt.Printf("  Sessions: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
+
+	var totalReadBytes uint64
+	var totalWrittenBytes uint64
+	var countIOMetrics int
+	for i := 0; i < nClient; i++ {
+		if sessionReadBytes[i] > 0 || sessionWrittenBytes[i] > 0 {
+			countIOMetrics++
+			totalReadBytes += sessionReadBytes[i]
+			totalWrittenBytes += sessionWrittenBytes[i]
+		}
+	}
+	avgReadBytesPerSec := uint64(0)
+	avgWrittenBytesPerSec := uint64(0)
+	if countIOMetrics > 0 {
+		avgReadBytesPerSec = totalReadBytes / uint64(totalSessionElapsed.Seconds())
+		avgWrittenBytesPerSec = totalWrittenBytes / uint64(totalSessionElapsed.Seconds())
+	}
+	if countIOMetrics > 0 {
+		fmt.Printf("  IO Bytes: total read %s (%s/s), total written %s (%s/s)\n",
+			Bytes(int64(totalReadBytes)), Bytes(int64(avgReadBytesPerSec)),
+			Bytes(int64(totalWrittenBytes)), Bytes(int64(avgWrittenBytesPerSec)))
+	} else {
+		fmt.Printf("  IO Bytes: not available\n")
+	}
 }
 
 type Query struct {

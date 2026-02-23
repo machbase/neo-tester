@@ -11,12 +11,14 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
 	"github.com/machbase/neo-server/v8/api/machgo"
+	"github.com/machbase/neo-server/v8/jsh/native/pretty"
 )
 
 var host = "127.0.0.1"
@@ -72,7 +74,7 @@ func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 	gen := NewDataGenerator(codes, interval)
 
 	var conn *machgo.Conn
-	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+	if c, err := db.Connect(ctx, api.WithPassword(user, password), api.WithIOMetrics(true)); err != nil {
 		panic(err)
 	} else {
 		conn = c.(*machgo.Conn)
@@ -83,6 +85,7 @@ func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 		panic(err)
 	}
 
+	count := uint64(0)
 	go gen.Start(func(data Data) {
 		code := data.Code
 		ts := data.Timestamp
@@ -92,9 +95,37 @@ func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 		askVal := data.AskPrice
 		err := appender.Append(code, ts, closeVal, volVal, bidVal, askVal)
 		if err != nil {
-			fmt.Printf("append error: %v\n", err)
+			panic(err)
 		}
+		atomic.AddUint64(&count, 1)
 	})
+
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		tick := time.Now()
+		lastCount := uint64(0)
+		for {
+			select {
+			case <-gen.Done():
+				return
+			case now := <-ticker.C:
+				elapsed := now.Sub(tick).Seconds()
+				readBytes, writeBytes, _ := conn.ResetIOMetrics()
+				tick = now
+				cnt := atomic.LoadUint64(&count)
+				tps := float64(cnt-lastCount) / elapsed
+				lastCount = cnt
+				writeBytesPerSec := float64(writeBytes) / elapsed
+				readBytesPerSec := float64(readBytes) / elapsed
+				fmt.Printf("%s TPS: %s/s Read: %s (%s/s), Write: %s (%s/s)\n",
+					now.Format("2006-01-02 15:04:05"),
+					pretty.Ints(tps),
+					pretty.Bytes(readBytes), pretty.Bytes(readBytesPerSec),
+					pretty.Bytes(writeBytes), pretty.Bytes(writeBytesPerSec))
+			}
+		}
+	}()
 
 	// return stop function
 	return func() {
@@ -258,6 +289,10 @@ func (dg *DataGenerator) Stop() {
 	dg.stopOnce.Do(func() {
 		close(dg.stopChan)
 	})
+}
+
+func (dg *DataGenerator) Done() <-chan struct{} {
+	return dg.stopChan
 }
 
 func randomizedInterval(rnd *rand.Rand, base time.Duration) time.Duration {

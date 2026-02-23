@@ -103,7 +103,8 @@ func benchSelectRollup(b *testing.B, ctx context.Context, conn api.Conn) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rows, err := conn.Query(ctx, `
-			select /*+ SCAN_FORWARD(stock_rollup_1m) */ code,
+			select 
+				code,
 				time,
 				sum(sum_price) / sum(cnt) as avg_price,
 				sum(sum_volume) as total_volume,
@@ -146,12 +147,13 @@ func benchSelectRollup(b *testing.B, ctx context.Context, conn api.Conn) {
 
 func benchSelect(b *testing.B, ctx context.Context, conn api.Conn) {
 	timeTo := time.Now().Add(-time.Duration(2 * time.Minute))
-	timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
+	timeFrom := timeTo.Add(-time.Duration(60 * time.Second))
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rows, err := conn.Query(ctx, `
-			select code,
+			select
+				code,
 				time,
 				price,
 				volume,
