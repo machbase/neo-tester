@@ -3,8 +3,8 @@ module tester
 go 1.24.9
 
 require (
-	github.com/machbase/neo-engine/v8 v8.0.63
-	github.com/machbase/neo-server/v8 v8.0.73-rc2.0.20260223042727-6ba3c21c5431
+	github.com/machbase/neo-engine/v8 v8.0.64
+	github.com/machbase/neo-server/v8 v8.0.73-rc3.0.20260224042503-c55601f73a04
 	github.com/tidwall/gjson v1.18.0
 	golang.org/x/text v0.32.0
 )

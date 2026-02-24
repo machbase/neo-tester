@@ -64,7 +64,7 @@ func connectMachGo(ctx context.Context) (api.Conn, error) {
 		Port:           port,
 		MaxOpenConn:    -1,
 		MaxOpenQuery:   -1,
-		StatementReuse: machgo.StatementReuseAuto,
+		StatementCache: api.StatementCacheAuto,
 		FetchRows:      1000,
 	})
 	if err != nil {
