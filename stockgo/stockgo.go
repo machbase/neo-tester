@@ -22,6 +22,7 @@ var nFetch = 100
 var doProfile = false
 var doPreparedStmt = false
 var doRollupQuery = false
+var doUnionQuery = false
 var doReuseStmt = false
 var sessionElapsed []time.Duration
 var sessionReadBytes []uint64
@@ -42,6 +43,7 @@ func main() {
 	flag.StringVar(&password, "P", password, "password")
 	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.BoolVar(&doRollupQuery, "rollup", doRollupQuery, "perform rollup query instead of tick query")
+	flag.BoolVar(&doUnionQuery, "union", doUnionQuery, "perform union query instead of tick query")
 	flag.StringVar(&code, "code", code, "stock code (tag) to insert/query")
 	flag.BoolVar(&doProfile, "prof", doProfile, "enable profiling")
 	flag.BoolVar(&doReuseStmt, "reuse", doReuseStmt, "reuse prepared statement")
@@ -99,6 +101,7 @@ func main() {
 			var options = []api.ConnectOption{
 				api.WithPassword(user, password),
 				api.WithIOMetrics(true),
+				api.WithStatementCache(api.StatementCacheAuto),
 			}
 			if doReuseStmt {
 				options = append(options, api.WithStatementCache(api.StatementCacheAuto))
@@ -133,6 +136,10 @@ func main() {
 				} else {
 					RunRollupQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 				}
+			} else if doUnionQuery {
+				timeTo := time.Now()
+				timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
+				RunUnionQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 			} else {
 				timeTo := time.Now()
 				timeFrom := timeTo.Add(-time.Duration(1 * time.Minute))
@@ -451,4 +458,65 @@ func Bytes(v int64) string {
 		return p.Sprintf("%dB", v)
 	}
 	return p.Sprintf("%.1f%s", f, u)
+}
+
+func RunUnionQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, q Query) {
+	for j := 0; j < nCount; j++ {
+		tick := time.Now()
+		r, err := conn.Query(ctx, `
+			select
+				DATE_TRUNC('minute', time) as mtime,
+				sum(sum_price) / sum(cnt) as avg_price,
+				sum(sum_volume) as total_volume,
+				sum(sum_bid) / sum(cnt) as avg_bid,
+				sum(sum_ask) / sum(cnt) as avg_ask
+			from stock_rollup_1m
+			where code = ?
+			and time >= date_trunc('minute', sysdate) - 60m
+			and time < date_trunc('minute', sysdate) - 2m
+			group by mtime
+			order by mtime
+			UNION ALL
+			select
+				DATE_TRUNC('minute', time) as mtime,
+				SUM(price)/count(*) as avg_price,
+				SUM(volume) as total_volume,
+				SUM(bid_price)/count(*) as avg_bid,
+				SUM(ask_price)/count(*) as avg_ask
+			from stock_tick
+			where code = ?
+			and time >= date_trunc('minute', sysdate) - 2m
+			group by mtime
+			order by mtime`,
+			q.code, q.code)
+		if err != nil {
+			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+		rows := r.(*machgo.Rows)
+		n := 0
+		for rows.Next() {
+			if err := rows.Err(); err != nil {
+				panic(err)
+			}
+			n++
+			var mtime time.Time
+			var avgPrice float64
+			var totalVolume float64
+			var avgBid float64
+			var avgAsk float64
+			if err := rows.Scan(&mtime, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+				panic(err)
+			}
+		}
+		if err := rows.Err(); err != nil {
+			panic(err)
+		}
+		tick = time.Now()
+		err = rows.Close()
+		if err != nil {
+			fmt.Printf("Close error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
+			return
+		}
+	}
 }

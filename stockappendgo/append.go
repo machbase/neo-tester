@@ -356,6 +356,36 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 	if result.Err() != nil {
 		panic(result.Err())
 	}
+	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1h (
+								code      varchar(20) primary key,
+								time      datetime basetime,
+								sum_price double,
+								sum_volume double,
+								sum_bid   double,
+								sum_ask   double,
+								cnt       integer
+							)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create rollup rollup_stock_1h
+								into (stock_rollup_1h)
+								as (
+									select
+										code,
+										date_trunc('hour', time) as time,
+										sum(sum_price) as sum_price,
+										sum(sum_volume) as sum_volume,
+										sum(sum_bid) as sum_bid,
+										sum(sum_ask) as sum_ask,
+										sum(cnt) as cnt
+									from stock_rollup_1m
+									group by code, time
+								)
+								interval 1 hour;`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
 	// result = conn.Exec(ctx, `exec rollup_force(rollup_stock_1m)`)
 	// if result.Err() != nil {
 	// 	panic(result.Err())
