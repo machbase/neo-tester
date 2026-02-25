@@ -103,9 +103,6 @@ func main() {
 				api.WithIOMetrics(true),
 				api.WithStatementCache(api.StatementCacheAuto),
 			}
-			if doReuseStmt {
-				options = append(options, api.WithStatementCache(api.StatementCacheAuto))
-			}
 			if c, err := db.Connect(ctx, options...); err != nil {
 				panic(err)
 			} else {
