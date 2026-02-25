@@ -25,6 +25,7 @@ var host = "127.0.0.1"
 var port = 5656
 var user = "sys"
 var password = "manager"
+var createRollup = ""
 var appendTps = float64(1000) // 1000 TPS
 
 // Usage: go run ./stockappend -tps <tps> -h <host> -p <port> -u <user> -P <password>
@@ -34,6 +35,7 @@ func main() {
 	flag.StringVar(&user, "u", user, "user")
 	flag.StringVar(&password, "P", password, "password")
 	flag.Float64Var(&appendTps, "tps", appendTps, "append TPS (5 = 20ms interval)")
+	flag.StringVar(&createRollup, "create-rollup", "", "create rollup tables if not exists (options: 1s, 1m)")
 	flag.Parse()
 
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
@@ -51,7 +53,14 @@ func main() {
 	ctx := context.Background()
 
 	// create tables if not exists
-	CreateTablesIfNotExists(ctx, db)
+	switch createRollup {
+	case "1s":
+		CreateTablesIfNotExistsWith1S(ctx, db)
+	case "1m":
+		CreateTablesIfNotExists(ctx, db)
+	default:
+		fmt.Println("Skipping table creation. Use -create-rollup=1s or 1m to create tables if not exists.")
+	}
 
 	// start appending data
 	if appendTps > 0 {
@@ -350,6 +359,119 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 											sum(ask_price) as sum_ask,
 											count(*) as cnt
 										from stock_tick
+									group by code, time
+								)
+								interval 1 min`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1h (
+								code      varchar(20) primary key,
+								time      datetime basetime,
+								sum_price double,
+								sum_volume double,
+								sum_bid   double,
+								sum_ask   double,
+								cnt       integer
+							)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create rollup rollup_stock_1h
+								into (stock_rollup_1h)
+								as (
+									select
+										code,
+										date_trunc('hour', time) as time,
+										sum(sum_price) as sum_price,
+										sum(sum_volume) as sum_volume,
+										sum(sum_bid) as sum_bid,
+										sum(sum_ask) as sum_ask,
+										sum(cnt) as cnt
+									from stock_rollup_1m
+									group by code, time
+								)
+								interval 1 hour;`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	// result = conn.Exec(ctx, `exec rollup_force(rollup_stock_1m)`)
+	// if result.Err() != nil {
+	// 	panic(result.Err())
+	// }
+}
+
+func CreateTablesIfNotExistsWith1S(ctx context.Context, db api.Database) {
+	conn, err := db.Connect(ctx, api.WithPassword(user, password))
+	if err != nil {
+		panic(err)
+	}
+	defer conn.Close()
+
+	result := conn.Exec(ctx, `create tag table if not exists stock_tick (
+									code      varchar(20) primary key,
+									time      datetime basetime,
+									price     double,
+									volume    double,
+									bid_price double,
+									ask_price double
+								)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1s (
+									code      varchar(20) primary key,
+									time      datetime basetime,
+									sum_price double,
+									sum_volume double,
+									sum_bid   double,
+									sum_ask   double,
+									cnt       integer
+								)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create rollup rollup_stock_1s
+								into (stock_rollup_1s)
+								as (
+									select code,
+											date_trunc('second', time) as time,
+											sum(price) as sum_price,
+											sum(volume) as sum_volume,
+											sum(bid_price) as sum_bid,
+											sum(ask_price) as sum_ask,
+											count(*) as cnt
+										from stock_tick
+									group by code, time
+								)
+								interval 1 sec`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1m (
+									code      varchar(20) primary key,
+									time      datetime basetime,
+									sum_price double,
+									sum_volume double,
+									sum_bid   double,
+									sum_ask   double,
+									cnt       integer
+								)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create rollup rollup_stock_1m
+								into (stock_rollup_1m)
+								as (
+									select
+										code,
+										date_trunc('minute', time) as time,
+										sum(sum_price) as sum_price,
+										sum(sum_volume) as sum_volume,
+										sum(sum_bid) as sum_bid,
+										sum(sum_ask) as sum_ask,
+										sum(cnt) as cnt
+									from stock_rollup_1s
 									group by code, time
 								)
 								interval 1 min`)
