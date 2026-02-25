@@ -71,16 +71,29 @@
 
 - *2026/02/24 with api/machgo  union query*
 
-`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -rollup`
+`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -union`
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
 |v8.0.73-rc3| stockgo      |      1  |   10,000   |    573/s |  17.4s     |   17.4s    |   17.4s     |
-|           | rollup       |      8  |   10,000   |  4,727/s |  16.3s     |   16.9s    |   16.6s     |
+|           | union        |      8  |   10,000   |  4,727/s |  16.3s     |   16.9s    |   16.6s     |
 |           |              |     16  |   10,000   |  8,381/s |  18.5s     |   19.0s    |   18.8s     |
 |           |              |     32  |   10,000   | 17,860/s |  17.5s     |   17.9s    |   17.7s     |
 |           |              |     64  |   10,000   | 21,519/s |  22.0s     |   29.6s    |   27.4s     |
 |           |              |    128  |   10,000   | 20,085/s |  54.2s     |   1m03s    |   1m01s     |
 |           |              |    512  |   10,000   | 19,835/s |  4m01s     |   4m17s    |   4m15s     |
+
+- *2026/02/25 with api/machgo  union query, after fix UNION ALL double and AVG()*
+
+`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -union`
+| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
+|-----------|--------------|---------|------------|----------|------------|------------|-------------|
+|v8.0.73-rc3| stockgo      |      1  |   10,000   |    590/s |  16.9s     |   16.9s    |   16.9s     |
+|           | union        |      8  |   10,000   |  4,791/s |  16.1s     |   16.6s    |   16.3s     |
+|           |              |     16  |   10,000   |  9,819/s |  15.8s     |   16.2s    |   15.9s     |
+|           |              |     32  |   10,000   | 19,105/s |  16.2s     |   16.7s    |   16.4s     |
+|           |              |     64  |   10,000   | 20,489/s |  25.8s     |   31.2s    |   29.7s     |
+|           |              |    128  |   10,000   | 22,433/s |  47.8s     |   56.9s    |   55.4s     |
+|           |              |    512  |   10,000   | 22,752/s |  3m03s     |   3m44s    |   3m40s     |
 
 - stockbench result
 
