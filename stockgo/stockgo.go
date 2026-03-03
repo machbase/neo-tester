@@ -193,8 +193,8 @@ func main() {
 	avgReadBytesPerSec := uint64(0)
 	avgWrittenBytesPerSec := uint64(0)
 	if countIOMetrics > 0 {
-		avgReadBytesPerSec = totalReadBytes / uint64(totalSessionElapsed.Seconds())
-		avgWrittenBytesPerSec = totalWrittenBytes / uint64(totalSessionElapsed.Seconds())
+		avgReadBytesPerSec = (totalReadBytes * uint64(nClient)) / uint64(totalSessionElapsed.Seconds())
+		avgWrittenBytesPerSec = (totalWrittenBytes * uint64(nClient)) / uint64(totalSessionElapsed.Seconds())
 	}
 	if countIOMetrics > 0 {
 		fmt.Printf("  IO Bytes: total read %s (%s/s), total written %s (%s/s)\n",
