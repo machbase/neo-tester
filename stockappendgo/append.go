@@ -18,7 +18,7 @@ import (
 	"github.com/machbase/neo-engine/v8/native"
 	"github.com/machbase/neo-server/v8/api"
 	"github.com/machbase/neo-server/v8/api/machgo"
-	"github.com/machbase/neo-server/v8/jsh/native/pretty"
+	"github.com/machbase/neo-server/v8/jsh/lib/pretty"
 )
 
 var host = "127.0.0.1"
