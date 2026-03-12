@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/machbase/neo-engine/v8 v8.0.67
-	github.com/machbase/neo-server/v8 v8.0.74-0.20260310115844-e2a7ca34ce90
+	github.com/machbase/neo-server/v8 v8.0.74-0.20260312021411-55a5c14deb2c
 	github.com/tidwall/gjson v1.18.0
 	golang.org/x/text v0.34.0
 )
