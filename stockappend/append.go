@@ -11,18 +11,20 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-engine/v8/native"
-	"github.com/machbase/neo-server/v8/api/machcli"
+	"github.com/machbase/neo-client/machgo"
+	"github.com/machbase/neo-server/v8/jsh/lib/pretty"
 )
 
 var host = "127.0.0.1"
 var port = 5656
 var user = "sys"
 var password = "manager"
+var createTables = false
 var appendTps = float64(1000) // 1000 TPS
 
 // Usage: go run ./stockappend -tps <tps> -h <host> -p <port> -u <user> -P <password>
@@ -32,10 +34,10 @@ func main() {
 	flag.StringVar(&user, "u", user, "user")
 	flag.StringVar(&password, "P", password, "password")
 	flag.Float64Var(&appendTps, "tps", appendTps, "append TPS (5 = 20ms interval)")
+	flag.BoolVar(&createTables, "create", false, "create tables and rollups")
 	flag.Parse()
 
-	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
-	db, err := machcli.NewDatabase(&machcli.Config{
+	db, err := machgo.NewDatabase(&machgo.Config{
 		Host:         host,
 		Port:         port,
 		MaxOpenConn:  -1,
@@ -49,7 +51,9 @@ func main() {
 	ctx := context.Background()
 
 	// create tables if not exists
-	CreateTablesIfNotExists(ctx, db)
+	if createTables {
+		CreateTablesIfNotExists(ctx, db)
+	}
 
 	// start appending data
 	if appendTps > 0 {
@@ -66,16 +70,16 @@ func main() {
 //go:embed stock_codes.txt
 var codesTxt string
 
-func AppendData(ctx context.Context, db *machcli.Database, tps float64) func() {
+func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 	codes := strings.Split(codesTxt, "\n")
 	interval := time.Duration(float64(time.Second) / tps)
 	gen := NewDataGenerator(codes, interval)
 
-	var conn *machcli.Conn
-	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+	var conn *machgo.Conn
+	if c, err := db.Connect(ctx, api.WithPassword(user, password), api.WithIOMetrics(true)); err != nil {
 		panic(err)
 	} else {
-		conn = c.(*machcli.Conn)
+		conn = c.(*machgo.Conn)
 	}
 
 	appender, err := conn.Appender(ctx, "stock_tick")
@@ -83,6 +87,7 @@ func AppendData(ctx context.Context, db *machcli.Database, tps float64) func() {
 		panic(err)
 	}
 
+	count := uint64(0)
 	go gen.Start(func(data Data) {
 		code := data.Code
 		ts := data.Timestamp
@@ -92,9 +97,84 @@ func AppendData(ctx context.Context, db *machcli.Database, tps float64) func() {
 		askVal := data.AskPrice
 		err := appender.Append(code, ts, closeVal, volVal, bidVal, askVal)
 		if err != nil {
-			fmt.Printf("append error: %v\n", err)
+			panic(err)
 		}
+		atomic.AddUint64(&count, 1)
 	})
+
+	go func() {
+		statTicker := time.NewTicker(1 * time.Second)
+		defer statTicker.Stop()
+		var statConn *machgo.Conn
+		if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+			panic(err)
+		} else {
+			statConn = c.(*machgo.Conn)
+			defer statConn.Close()
+		}
+
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		tick := time.Now()
+		lastCount := uint64(0)
+		for {
+			select {
+			case <-gen.Done():
+				return
+			case <-statTicker.C:
+				rollupName := "ROLLUP_STOCK_1S"
+				rows, err := statConn.Query(ctx, `select 
+					C.last_elapsed_msec as elapsed_msec,
+					B.table_end_rid - C.end_rid as gap
+				from
+					m$sys_tables A,
+					v$storage_tag_tables B,
+					v$rollup C
+				where
+					C.rollup_name = ?
+				and C.SOURCE_TABLE = A.NAME
+				and B.ID = A.ID
+				`, rollupName)
+				if err != nil {
+					fmt.Println("Error querying rollup elapsed time:", err)
+					continue
+				}
+				var maxElapsed float64
+				var maxGap uint64
+				for rows.Next() {
+					var elapsedMsec float64
+					var gap uint64
+					if err := rows.Scan(&elapsedMsec, &gap); err != nil {
+						fmt.Println("Error scanning rollup elapsed time:", err)
+						continue
+					}
+					if elapsedMsec > maxElapsed {
+						maxElapsed = elapsedMsec
+					}
+					if gap > maxGap {
+						maxGap = gap
+					}
+				}
+				rows.Close()
+				fmt.Printf("  %s max elapsed: %s, max gap: %s\n",
+					rollupName, pretty.Durations(time.Duration(maxElapsed)*time.Millisecond), pretty.Ints(maxGap))
+			case now := <-ticker.C:
+				elapsed := now.Sub(tick).Seconds()
+				readBytes, writeBytes, _ := conn.ResetIOMetrics()
+				tick = now
+				cnt := atomic.LoadUint64(&count)
+				tps := float64(cnt-lastCount) / elapsed
+				lastCount = cnt
+				writeBytesPerSec := float64(writeBytes) / elapsed
+				readBytesPerSec := float64(readBytes) / elapsed
+				fmt.Printf("%s TPS: %s/s Read: %s (%s/s), Write: %s (%s/s)\n",
+					now.Format("2006-01-02 15:04:05"),
+					pretty.Ints(tps),
+					pretty.Bytes(readBytes), pretty.Bytes(readBytesPerSec),
+					pretty.Bytes(writeBytes), pretty.Bytes(writeBytesPerSec))
+			}
+		}
+	}()
 
 	// return stop function
 	return func() {
@@ -260,6 +340,10 @@ func (dg *DataGenerator) Stop() {
 	})
 }
 
+func (dg *DataGenerator) Done() <-chan struct{} {
+	return dg.stopChan
+}
+
 func randomizedInterval(rnd *rand.Rand, base time.Duration) time.Duration {
 	if base <= 0 {
 		return 0
@@ -282,47 +366,141 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 	defer conn.Close()
 
 	result := conn.Exec(ctx, `create tag table if not exists stock_tick (
-									code      varchar(20) primary key,
-									time      datetime basetime,
-									price     double,
-									volume    double,
-									bid_price double,
-									ask_price double
-								)`)
+		code      varchar(20) primary key,
+		time      datetime basetime,
+		price     double,
+		volume    double,
+		bid_price double,
+		ask_price double
+	)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1s (
+		code       varchar(20) primary key,
+		time       datetime basetime,
+		sum_price  double,
+		sum_volume double,
+		sum_bid    double,
+		sum_ask    double,
+		cnt        integer,
+		open       double,
+		open_time  datetime,
+		close      double,
+		close_time datetime,
+		high       double,
+		low        double
+	)`)
 	if result.Err() != nil {
 		panic(result.Err())
 	}
 	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1m (
-									code      varchar(20) primary key,
-									time      datetime basetime,
-									sum_price double,
-									sum_volume double,
-									sum_bid   double,
-									sum_ask   double,
-									cnt       integer
-								)`)
+    	code       varchar(20) primary key,
+		time       datetime basetime,
+		sum_price  double,
+		sum_volume double,
+		sum_bid    double,
+		sum_ask    double,
+		cnt        integer,
+		open       double,
+		open_time  datetime,
+		close      double,
+		close_time datetime,
+		high       double,
+		low        double
+	)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1h (
+		code       varchar(20) primary key,
+		time       datetime basetime,
+		sum_price  double,
+		sum_volume double,
+		sum_bid    double,
+		sum_ask    double,
+		cnt        integer,
+		open       double,
+		open_time  datetime,
+		close      double,
+		close_time datetime,
+		high       double,
+		low        double
+	)`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+
+	result = conn.Exec(ctx, `create rollup rollup_stock_1s
+		into (stock_rollup_1s)
+		as (
+			select
+				code,
+				date_trunc('second', time) as time,
+				sum(price) as sum_price,
+				sum(volume) as sum_volume,
+				sum(bid_price) as sum_bid,
+				sum(ask_price) as sum_ask,
+				count(*) as cnt,
+				first(time, price) as open,
+				min(time) as open_time,
+				last(time, price) as close,
+				max(time) as close_time,
+				max(price) as high,
+				min(price) as low
+			from stock_tick
+			group by code, time
+		)
+		interval 1 sec`)
 	if result.Err() != nil {
 		panic(result.Err())
 	}
 	result = conn.Exec(ctx, `create rollup rollup_stock_1m
-								into (stock_rollup_1m)
-								as (
-									select code,
-											date_trunc('minute', time) as time,
-											sum(price) as sum_price,
-											sum(volume) as sum_volume,
-											sum(bid_price) as sum_bid,
-											sum(ask_price) as sum_ask,
-											count(*) as cnt
-										from stock_tick
-									group by code, time
-								)
-								interval 1 min`)
+		into (stock_rollup_1m)
+		as (
+			select
+				code,
+				date_trunc('minute', time) as time,
+				sum(sum_price) as sum_price,
+				sum(sum_volume) as sum_volume,
+				sum(sum_bid) as sum_bid,
+				sum(sum_ask) as sum_ask,
+				sum(cnt) as cnt,
+				first(open_time, open) as open,
+				min(open_time) as open_time,
+				last(close_time, close) as close,
+				max(close_time) as close_time,
+				max(high) as high,
+				min(low) as low
+			from stock_rollup_1s
+			group by code, time
+		)
+		interval 1 min`)
 	if result.Err() != nil {
 		panic(result.Err())
 	}
-	// result = conn.Exec(ctx, `exec rollup_force(rollup_stock_1m)`)
-	// if result.Err() != nil {
-	// 	panic(result.Err())
-	// }
+	result = conn.Exec(ctx, `create rollup rollup_stock_1h
+		into (stock_rollup_1h)
+		as (
+			select
+				code,
+				date_trunc('hour', time) as time,
+				sum(sum_price) as sum_price,
+				sum(sum_volume) as sum_volume,
+				sum(sum_bid) as sum_bid,
+				sum(sum_ask) as sum_ask,
+				sum(cnt) as cnt,
+				first(open_time, open) as open,
+				min(open_time) as open_time,
+				last(close_time, close) as close,
+				max(close_time) as close_time,
+				max(high) as high,
+				min(low) as low
+			from stock_rollup_1m
+			group by code, time
+		)
+		interval 1 hour`)
+	if result.Err() != nil {
+		panic(result.Err())
+	}
 }

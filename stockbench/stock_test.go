@@ -12,8 +12,8 @@ import (
 )
 
 var nFetch = 100
-var host = "192.168.0.90"
-var port = 51000
+var host = "127.0.0.1"
+var port = 5656
 var user = "sys"
 var password = "manager"
 var code = "WISH"
