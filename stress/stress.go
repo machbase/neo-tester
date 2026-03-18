@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/machbase/neo-server/v8/api"
+	"github.com/machbase/neo-client/api"
 	"github.com/tidwall/gjson"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"

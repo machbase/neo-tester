@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/machbase/neo-client/api"
+	"github.com/machbase/neo-client/machgo"
 	"github.com/machbase/neo-engine/v8/native"
-	"github.com/machbase/neo-server/v8/api"
-	"github.com/machbase/neo-server/v8/api/machgo"
 	"github.com/machbase/neo-server/v8/jsh/lib/pretty"
 )
 

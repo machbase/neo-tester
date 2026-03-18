@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/machbase/neo-server/v8/api"
-	"github.com/machbase/neo-server/v8/api/machgo"
+	"github.com/machbase/neo-client/api"
+	"github.com/machbase/neo-client/machgo"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
