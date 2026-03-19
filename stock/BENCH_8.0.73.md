@@ -1,26 +1,12 @@
 
 ## Compare machcli vs. machgo
 
-- *2026/02/20 with api/machcli*
+- *2026/02/20 with api/machgo with stmt-reuse*
 
 `go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -rollup`
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stock        |      1  |   10,000   |    827/s |  12.0s     |   12.0s    |   12.0s     |
-|           | rollup       |      8  |   10,000   |  6,030/s |  12.5s     |   13.2s    |   12.8s     |
-|           |              |     16  |   10,000   | 10,641/s |  13.8s     |   15.0s    |   14.5s     |
-|           |              |     32  |   10,000   | 15,877/s |  19.0s     |   20.1s    |   19.6s     |
-|           |              |     64  |   10,000   | 18,289/s |  32.7s     |   34.9s    |   18.2s     |
-|           |              |    128  |   10,000   | 17,141/s |  1m 9s     |   1m14s    |   1m13s     |
-|           |              |    512  |   10,000   | 24,157/s |  3m17s     |   3m31s    |   3m28s     |
-
-
-- *2026/02/20 with api/machgo with stmt-reuse*
-
-`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -rollup`
-| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
-|-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stockgo      |      1  |   10,000   |  1,828/s |   5.4s     |    5.4s    |    5.4s     |
+|v8.0.73-rc3| stock        |      1  |   10,000   |  1,828/s |   5.4s     |    5.4s    |    5.4s     |
 |           | rollup       |      8  |   10,000   | 11,586/s |   5.1s     |    6.9s    |    6.2s     |
 |           |              |     16  |   10,000   | 22,420/s |   6.1s     |    7.1s    |    6.8s     |
 |           |              |     32  |   10,000   | 28,869/s |  10.3s     |   11.0s    |   10.6s     |
@@ -28,26 +14,13 @@
 |           |              |    128  |   10,000   | 29,273/s |  37.5s     |   43.6s    |   40.4s     |
 |           |              |    512  |   10,000   | 29,874/s |  48.8s     |   2m51s    |   2m24s     |
 
-- *2026/02/23 with api/machcli*
+
+- *2026/02/23 with api/machgo*
 
 `go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -rollup`
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stock        |      1  |   10,000   |    824/s |  12.1s     |   12.1s    |   12.1s     |
-|           | rollup       |      8  |   10,000   |  5,946/s |  11.9s     |   13.4s    |   13.0s     |
-|           |              |     16  |   10,000   | 10,512/s |  13.9s     |   15.2s    |   14.7s     |
-|           |              |     32  |   10,000   | 15,898/s |  19.3s     |   20.1s    |   19.7s     |
-|           |              |     64  |   10,000   | 18,314/s |  32.8s     |   34.9s    |   34.2s     |
-|           |              |    128  |   10,000   | 17,043/s |  1m 7s     |   1m15s    |   1m13s     |
-|           |              |    512  |   10,000   | 24,264/s |  3m14s     |   3m30s    |   3m27s     |
-
-
-- *2026/02/23 with api/machgo*
-
-`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -rollup`
-| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
-|-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stockgo      |      1  |   10,000   |  1,105/s |   9.0s     |    9.0s    |    9.0s     |
+|v8.0.73-rc3| stock        |      1  |   10,000   |  1,105/s |   9.0s     |    9.0s    |    9.0s     |
 |           | rollup       |      8  |   10,000   |  6,777/s |  11.2s     |   11.8s    |   11.6s     |
 |           |              |     16  |   10,000   | 12,847/s |  10.5s     |   12.4s    |   12.4s     |
 |           |              |     32  |   10,000   | 19,333/s |  14.8s     |   16.5s    |   16.0s     |
@@ -57,10 +30,10 @@
 
 - *2026/02/20 with api/machgo with stmt-reuse*
 
-`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -rollup -reuse`
+`go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -rollup -reuse`
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stockgo      |      1  |   10,000   |  1,719/s |   5.8s     |    5.8s    |    5.8s     |
+|v8.0.73-rc3| stock        |      1  |   10,000   |  1,719/s |   5.8s     |    5.8s    |    5.8s     |
 |           | rollup       |      8  |   10,000   | 11,443/s |   6.2s     |    6.9s    |    6.6s     |
 |           | stmt-reuse   |     16  |   10,000   | 20,843/s |   5.1s     |    7.6s    |    6.4s     |
 |           |              |     32  |   10,000   | 29,231/s |  10.2s     |   10.9s    |   10.6s     |
@@ -71,10 +44,10 @@
 
 - *2026/02/24 with api/machgo  union query*
 
-`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -union`
+`go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -union`
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stockgo      |      1  |   10,000   |    573/s |  17.4s     |   17.4s    |   17.4s     |
+|v8.0.73-rc3| stock        |      1  |   10,000   |    573/s |  17.4s     |   17.4s    |   17.4s     |
 |           | union        |      8  |   10,000   |  4,727/s |  16.3s     |   16.9s    |   16.6s     |
 |           |              |     16  |   10,000   |  8,381/s |  18.5s     |   19.0s    |   18.8s     |
 |           |              |     32  |   10,000   | 17,860/s |  17.5s     |   17.9s    |   17.7s     |
@@ -84,10 +57,10 @@
 
 - *2026/02/25 with api/machgo  union query, after fix UNION ALL double and AVG(), union(1m, tick)*
 
-`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -union`
+`go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -union`
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stockgo      |      1  |   10,000   |    590/s |  16.9s     |   16.9s    |   16.9s     |
+|v8.0.73-rc3| stock        |      1  |   10,000   |    590/s |  16.9s     |   16.9s    |   16.9s     |
 |           | union        |      8  |   10,000   |  4,791/s |  16.1s     |   16.6s    |   16.3s     |
 |           |   (1m, tick) |     16  |   10,000   |  9,819/s |  15.8s     |   16.2s    |   15.9s     |
 |           |              |     32  |   10,000   | 19,105/s |  16.2s     |   16.7s    |   16.4s     |
@@ -97,28 +70,13 @@
 
 - *2026/02/25 with api/machgo  union query, after fix UNION ALL double and AVG(), union(1m, 1s)*
 
-`go run ./stockgo -c <clients> -n <per client> -h <ip> -code WISH -union`
+`go run ./stock -c <clients> -n <per client> -h <ip> -code WISH -union`
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
 |-----------|--------------|---------|------------|----------|------------|------------|-------------|
-|v8.0.73-rc3| stockgo      |      1  |   10,000   |  1,168/s |   8.5s     |    8.5s    |    8.5s     |
+|v8.0.73-rc3| stock        |      1  |   10,000   |  1,168/s |   8.5s     |    8.5s    |    8.5s     |
 |           | union        |      8  |   10,000   |  6,914/s |   8.9s     |   11.5s    |    9.5s     |
 |           |   (1m, 1s)   |     16  |   10,000   | 13,709/s |   9.7s     |   11.6s    |   11.1s     |
 |           |              |     32  |   10,000   | 24,219/s |   8.3s     |   13.2s    |   10.6s     |
 |           |              |     64  |   10,000   | 32,363/s |  18.4s     |   19.7s    |   19.0s     |
 |           |              |    128  |   10,000   | 32,791/s |  34.2s     |   39.0s    |   37.0s     |
 |           |              |    512  |   10,000   | 33,215/s |  45.0s     |   2m33s    |   2m12s     |
-
-- stockbench result
-
-```
-goos: darwin
-goarch: arm64
-pkg: tester/stockbench
-cpu: Apple M5
-
-"github.com/machbase/neo-server/v8/api/machcli"
-BenchmarkSelect-10    	      86	  14861460 ns/op	   25010 B/op	    1543 allocs/op
-
-"github.com/machbase/neo-server/v8/api/machgo"
-BenchmarkSelect-10    	     228	   4730629 ns/op	   30324 B/op	     475 allocs/op
-```

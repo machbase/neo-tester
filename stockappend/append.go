@@ -122,42 +122,16 @@ func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 			case <-gen.Done():
 				return
 			case <-statTicker.C:
-				rollupName := "ROLLUP_STOCK_1S"
-				rows, err := statConn.Query(ctx, `select 
-					C.last_elapsed_msec as elapsed_msec,
-					B.table_end_rid - C.end_rid as gap
-				from
-					m$sys_tables A,
-					v$storage_tag_tables B,
-					v$rollup C
-				where
-					C.rollup_name = ?
-				and C.SOURCE_TABLE = A.NAME
-				and B.ID = A.ID
-				`, rollupName)
+				stats, err := ShowRollupGap(ctx, statConn)
 				if err != nil {
 					fmt.Println("Error querying rollup elapsed time:", err)
 					continue
 				}
-				var maxElapsed float64
-				var maxGap uint64
-				for rows.Next() {
-					var elapsedMsec float64
-					var gap uint64
-					if err := rows.Scan(&elapsedMsec, &gap); err != nil {
-						fmt.Println("Error scanning rollup elapsed time:", err)
-						continue
-					}
-					if elapsedMsec > maxElapsed {
-						maxElapsed = elapsedMsec
-					}
-					if gap > maxGap {
-						maxGap = gap
-					}
+				for _, stat := range stats {
+					fmt.Printf("%s Rollup %s elapsed: %s, gap: %s\n",
+						time.Now().Format("2006-01-02 15:04:05"),
+						stat.RollupName, pretty.Durations(stat.Elapsed), pretty.Ints(stat.Gap))
 				}
-				rows.Close()
-				fmt.Printf("  %s max elapsed: %s, max gap: %s\n",
-					rollupName, pretty.Durations(time.Duration(maxElapsed)*time.Millisecond), pretty.Ints(maxGap))
 			case now := <-ticker.C:
 				elapsed := now.Sub(tick).Seconds()
 				readBytes, writeBytes, _ := conn.ResetIOMetrics()
@@ -503,4 +477,60 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 	if result.Err() != nil {
 		panic(result.Err())
 	}
+}
+
+type RollupStat struct {
+	RollupName string
+	Elapsed    time.Duration
+	Gap        uint64
+}
+
+func ShowRollupGap(ctx context.Context, statConn *machgo.Conn) ([]RollupStat, error) {
+	var ret []RollupStat
+	rows, err := statConn.Query(ctx, `
+		select
+			C.rollup_name, 
+			C.last_elapsed_msec as elapsed_msec,
+			B.table_end_rid - C.end_rid as gap
+		from
+			m$sys_tables A,
+			v$storage_tag_tables B,
+			v$rollup C
+		where
+			C.SOURCE_TABLE = A.NAME
+		and B.ID = A.ID
+		order by C.rollup_name
+		`)
+	if err != nil {
+		return ret, err
+	}
+	defer rows.Close()
+	var curStat RollupStat
+	for rows.Next() {
+		var rollupName string
+		var elapsedMsec float64
+		var gap uint64
+		if err := rows.Scan(&rollupName, &elapsedMsec, &gap); err != nil {
+			fmt.Println("Error scanning rollup elapsed time:", err)
+			continue
+		}
+
+		if rollupName != curStat.RollupName {
+			if curStat.RollupName != "" {
+				ret = append(ret, curStat)
+			}
+			curStat = RollupStat{RollupName: rollupName}
+		}
+		var elapsed = time.Duration(elapsedMsec * float64(time.Millisecond))
+		if elapsed > curStat.Elapsed {
+			curStat.Elapsed = elapsed
+		}
+		if gap > curStat.Gap {
+			curStat.Gap = gap
+		}
+	}
+	if curStat.RollupName != "" {
+		ret = append(ret, curStat)
+	}
+	return ret, nil
 }
