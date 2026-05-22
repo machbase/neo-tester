@@ -8,7 +8,6 @@ import (
 
 	"github.com/machbase/neo-client/api"
 	"github.com/machbase/neo-client/machgo"
-	"github.com/machbase/neo-server/v8/api/machcli"
 )
 
 var nFetch = 100
@@ -18,16 +17,6 @@ var user = "sys"
 var password = "manager"
 var code = "WISH"
 
-func BenchmarkSelect_MachCli(b *testing.B) {
-	ctx := context.Background()
-	conn, err := connectMachCli(ctx)
-	if err != nil {
-		panic(err)
-	}
-	defer conn.Close()
-	benchSelect(b, ctx, conn)
-}
-
 func BenchmarkSelect_MachGo(b *testing.B) {
 	ctx := context.Background()
 	conn, err := connectMachGo(ctx)
@@ -36,16 +25,6 @@ func BenchmarkSelect_MachGo(b *testing.B) {
 	}
 	defer conn.Close()
 	benchSelect(b, ctx, conn)
-}
-
-func BenchmarkSelectRollup_MachCli(b *testing.B) {
-	ctx := context.Background()
-	conn, err := connectMachCli(ctx)
-	if err != nil {
-		panic(err)
-	}
-	defer conn.Close()
-	benchSelectRollup(b, ctx, conn)
 }
 
 func BenchmarkSelectRollup_MachGo(b *testing.B) {
@@ -66,24 +45,6 @@ func connectMachGo(ctx context.Context) (api.Conn, error) {
 		MaxOpenQuery:   -1,
 		StatementCache: api.StatementCacheAuto,
 		FetchRows:      1000,
-	})
-	if err != nil {
-		panic(err)
-	}
-
-	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
-		panic(err)
-	} else {
-		return c, nil
-	}
-}
-
-func connectMachCli(ctx context.Context) (api.Conn, error) {
-	db, err := machcli.NewDatabase(&machcli.Config{
-		Host:         host,
-		Port:         port,
-		MaxOpenConn:  -1,
-		MaxOpenQuery: -1,
 	})
 	if err != nil {
 		panic(err)

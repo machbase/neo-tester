@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-server/v8/api/machcli"
+	"github.com/machbase/neo-client/machgo"
 )
 
 var host = "127.0.0.1"
@@ -23,7 +23,7 @@ func main() {
 	flag.StringVar(&code, "code", code, "stock code (tag) to insert/query")
 	flag.Parse()
 
-	db, err := machcli.NewDatabase(&machcli.Config{
+	db, err := machgo.NewDatabase(&machgo.Config{
 		Host:         host,
 		Port:         port,
 		MaxOpenConn:  -1,

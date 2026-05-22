@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-server/v8/api/machcli"
+	"github.com/machbase/neo-client/machgo"
 )
 
 func BenchmarkConn(b *testing.B) {
-	db, err := machcli.NewDatabase(&machcli.Config{
+	db, err := machgo.NewDatabase(&machgo.Config{
 		Host:         "127.0.0.1",
 		Port:         5656,
 		MaxOpenConn:  -1,
@@ -33,7 +33,7 @@ func BenchmarkConn(b *testing.B) {
 }
 
 func BenchmarkQuery(b *testing.B) {
-	db, err := machcli.NewDatabase(&machcli.Config{
+	db, err := machgo.NewDatabase(&machgo.Config{
 		Host:         "127.0.0.1",
 		Port:         5656,
 		MaxOpenConn:  -1,
