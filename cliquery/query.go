@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/machbase/neo-client/api"
+	"github.com/machbase/neo-client/machgo"
 	"github.com/machbase/neo-engine/v8/native"
-	"github.com/machbase/neo-server/v8/api/machcli"
 )
 
 func main() {
@@ -43,7 +43,7 @@ func main() {
 	flag.Parse()
 
 	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
-	db, err := machcli.NewDatabase(&machcli.Config{
+	db, err := machgo.NewDatabase(&machgo.Config{
 		Host:         host,
 		Port:         port,
 		MaxOpenConn:  -1,
@@ -98,12 +98,12 @@ func main() {
 				runtime.LockOSThread()
 			}
 			<-startCh
-			var conn *machcli.Conn
+			var conn *machgo.Conn
 
 			if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
 				panic(err)
 			} else {
-				conn = c.(*machcli.Conn)
+				conn = c.(*machgo.Conn)
 			}
 			defer func() {
 				err := conn.Close()
@@ -146,7 +146,7 @@ func main() {
 	fmt.Printf("  Sessions: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
 }
 
-func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int, tagName string, nFetch int) {
+func RunQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, tagName string, nFetch int) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
 		r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name = ? LIMIT ?", tagName, nFetch)
@@ -154,7 +154,7 @@ func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int,
 			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machcli.Rows)
+		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -187,11 +187,11 @@ func RunQuery(ctx context.Context, clientId int, conn *machcli.Conn, nCount int,
 }
 
 func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, nFetch int) {
-	var stmt *machcli.PreparedStmt
+	var stmt *machgo.PreparedStmt
 	if s, err := conn.Prepare(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?"); err != nil {
 		panic(err)
 	} else {
-		stmt = s.(*machcli.PreparedStmt)
+		stmt = s.(*machgo.PreparedStmt)
 	}
 	defer func() {
 		if err := stmt.Close(); err != nil {
@@ -205,7 +205,7 @@ func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount i
 			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machcli.Rows)
+		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
