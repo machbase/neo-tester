@@ -2,12 +2,12 @@ package stockbench
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-client/machgo"
+	_ "github.com/machbase/neo-client"
 )
 
 var nFetch = 100
@@ -17,9 +17,9 @@ var user = "sys"
 var password = "manager"
 var code = "WISH"
 
-func BenchmarkSelect_MachGo(b *testing.B) {
+func BenchmarkSelect(b *testing.B) {
 	ctx := context.Background()
-	conn, err := connectMachGo(ctx)
+	conn, err := connect(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -27,9 +27,9 @@ func BenchmarkSelect_MachGo(b *testing.B) {
 	benchSelect(b, ctx, conn)
 }
 
-func BenchmarkSelectRollup_MachGo(b *testing.B) {
+func BenchmarkSelectRollup(b *testing.B) {
 	ctx := context.Background()
-	conn, err := connectMachGo(ctx)
+	conn, err := connect(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -37,33 +37,27 @@ func BenchmarkSelectRollup_MachGo(b *testing.B) {
 	benchSelectRollup(b, ctx, conn)
 }
 
-func connectMachGo(ctx context.Context) (api.Conn, error) {
-	db, err := machgo.NewDatabase(&machgo.Config{
-		Host:           host,
-		Port:           port,
-		MaxOpenConn:    -1,
-		MaxOpenQuery:   -1,
-		StatementCache: api.StatementCacheAuto,
-		FetchRows:      1000,
-	})
+func connect(ctx context.Context) (*sql.Conn, error) {
+	dsn := fmt.Sprintf("host=%s;port=%d;user=%s;password=%s;fetch_rows=1000", host, port, user, password)
+	db, err := sql.Open("machbase", dsn)
 	if err != nil {
 		panic(err)
 	}
 
-	if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+	if c, err := db.Conn(ctx); err != nil {
 		panic(err)
 	} else {
 		return c, nil
 	}
 }
 
-func benchSelectRollup(b *testing.B, ctx context.Context, conn api.Conn) {
+func benchSelectRollup(b *testing.B, ctx context.Context, conn *sql.Conn) {
 	timeTo := time.Now().Add(-time.Duration(2 * time.Minute))
 	timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rows, err := conn.Query(ctx, `
+		rows, err := conn.QueryContext(ctx, `
 			select 
 				code,
 				time,
@@ -106,13 +100,13 @@ func benchSelectRollup(b *testing.B, ctx context.Context, conn api.Conn) {
 	}
 }
 
-func benchSelect(b *testing.B, ctx context.Context, conn api.Conn) {
+func benchSelect(b *testing.B, ctx context.Context, conn *sql.Conn) {
 	timeTo := time.Now().Add(-time.Duration(2 * time.Minute))
 	timeFrom := timeTo.Add(-time.Duration(60 * time.Second))
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rows, err := conn.Query(ctx, `
+		rows, err := conn.QueryContext(ctx, `
 			select
 				code,
 				time,

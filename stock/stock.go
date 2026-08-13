@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -10,8 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-client/machgo"
+	"github.com/machbase/neo-client/machbase"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -20,7 +20,6 @@ var nClient = 50
 var nCount = 1000
 var nFetch = 100
 var doProfile = false
-var doPreparedStmt = false
 var doRollupQuery = false
 var doUnionQuery string
 var doReuseStmt = false
@@ -41,7 +40,6 @@ func main() {
 	flag.IntVar(&port, "p", port, "server port")
 	flag.StringVar(&user, "u", user, "user")
 	flag.StringVar(&password, "P", password, "password")
-	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.BoolVar(&doRollupQuery, "rollup", doRollupQuery, "perform rollup query instead of tick query")
 	flag.StringVar(&doUnionQuery, "union", doUnionQuery, "-union=[1m|1s] perform union query with rollup_1m or rollup_1s")
 	flag.StringVar(&code, "code", code, "stock code (tag) to insert/query")
@@ -49,12 +47,8 @@ func main() {
 	flag.BoolVar(&doReuseStmt, "reuse", doReuseStmt, "reuse prepared statement")
 	flag.Parse()
 
-	db, err := machgo.NewDatabase(&machgo.Config{
-		Host:         host,
-		Port:         port,
-		MaxOpenConn:  -1,
-		MaxOpenQuery: -1,
-	})
+	dsn := fmt.Sprintf("host=%s;port=%d;user=%s;password=%s;io_metrics=1", host, port, user, password)
+	db, err := sql.Open("machbase", dsn)
 	if err != nil {
 		panic(err)
 	}
@@ -97,16 +91,10 @@ func main() {
 		go func(ctx context.Context, clientId int) {
 			defer wg.Done()
 			<-startCh
-			var conn *machgo.Conn
-			var options = []api.ConnectOption{
-				api.WithPassword(user, password),
-				api.WithIOMetrics(true),
-				api.WithStatementCache(api.StatementCacheAuto),
-			}
-			if c, err := db.Connect(ctx, options...); err != nil {
+			meta := &machbase.Meta{}
+			conn, err := db.Conn(context.WithValue(ctx, machbase.MetaKey, meta))
+			if err != nil {
 				panic(err)
-			} else {
-				conn = c.(*machgo.Conn)
 			}
 			defer func() {
 				err := conn.Close()
@@ -118,7 +106,7 @@ func main() {
 			defer func() {
 				elapsed := time.Since(clientStart)
 				sessionElapsed[clientId] = elapsed
-				readBytes, writtenBytes, enabled := conn.IOMetrics()
+				readBytes, writtenBytes, enabled := meta.IOMetrics(true)
 				if enabled {
 					sessionReadBytes[clientId] = readBytes
 					sessionWrittenBytes[clientId] = writtenBytes
@@ -128,11 +116,7 @@ func main() {
 			if doRollupQuery {
 				timeTo := time.Now().Add(-time.Duration(2 * time.Minute))
 				timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
-				if doPreparedStmt {
-					RunRollupPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
-				} else {
-					RunRollupQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
-				}
+				RunRollupQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 			} else if doUnionQuery != "" {
 				timeTo := time.Now()
 				timeFrom := timeTo.Add(-time.Duration(60 * time.Minute))
@@ -148,11 +132,7 @@ func main() {
 			} else {
 				timeTo := time.Now()
 				timeFrom := timeTo.Add(-time.Duration(1 * time.Minute))
-				if doPreparedStmt {
-					RunPreparedQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
-				} else {
-					RunQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
-				}
+				RunQuery(ctx, clientId, conn, nCount, Query{code: code, nFetch: nFetch, betweenFrom: timeFrom, betweenTo: timeTo})
 			}
 		}(ctx, i)
 	}
@@ -160,9 +140,6 @@ func main() {
 	wg.Wait()
 
 	mode := "Query"
-	if doPreparedStmt {
-		mode = "Prepare"
-	}
 	fmt.Printf("All clients (%d) query(%d) (%s mode) completed in %v  %d ops/sec\n",
 		nClient, nCount, mode, time.Since(start), int(float64(nClient*nCount)/time.Since(start).Seconds()))
 	var totalSessionElapsed time.Duration
@@ -212,10 +189,10 @@ type Query struct {
 	betweenTo   time.Time
 }
 
-func RunQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, q Query) {
+func RunQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
-		r, err := conn.Query(ctx, `
+		rows, err := conn.QueryContext(ctx, `
 			select code,
 				time,
 				price,
@@ -231,7 +208,6 @@ func RunQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, 
 			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -263,71 +239,10 @@ func RunQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, 
 	}
 }
 
-func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
-	var stmt *machgo.PreparedStmt
-	if s, err := conn.Prepare(ctx, `
-			select /*+ SCAN_FORWARD(stock_tick) */ code,
-				time,
-				price,
-				volume,
-				bid_price,
-				ask_price
-			from stock_tick
-			where code = ?
-			and time between ? and ?
-			order by time
-			limit ?`); err != nil {
-		panic(err)
-	} else {
-		stmt = s.(*machgo.PreparedStmt)
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			panic(err)
-		}
-	}()
+func RunRollupQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
-		r, err := stmt.Query(ctx, q.code, q.betweenFrom, q.betweenTo, q.nFetch)
-		if err != nil {
-			fmt.Printf("Query error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
-			return
-		}
-		rows := r.(*machgo.Rows)
-		n := 0
-		for rows.Next() {
-			if err := rows.Err(); err != nil {
-				panic(err)
-			}
-			n++
-			var name string
-			var t time.Time
-			var avgPrice float64
-			var totalVolume float64
-			var avgBid float64
-			var avgAsk float64
-			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
-				panic(err)
-			}
-			if name != q.code {
-				panic(fmt.Sprintf("invalid name: %s", name))
-			}
-		}
-		if err := rows.Err(); err != nil {
-			panic(err)
-		}
-		tick = time.Now()
-		if err = rows.Close(); err != nil {
-			fmt.Printf("Close error(3), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
-			return
-		}
-	}
-}
-
-func RunRollupQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, q Query) {
-	for j := 0; j < nCount; j++ {
-		tick := time.Now()
-		r, err := conn.Query(ctx, `
+		rows, err := conn.QueryContext(ctx, `
 			select /*+ SCAN_FORWARD(stock_rollup_1m) */ code,
 				time,
 				sum(sum_price) / sum(cnt) as avg_price,
@@ -344,7 +259,6 @@ func RunRollupQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount
 			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -371,68 +285,6 @@ func RunRollupQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount
 		err = rows.Close()
 		if err != nil {
 			fmt.Printf("Close error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
-			return
-		}
-	}
-}
-
-func RunRollupPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, q Query) {
-	var stmt *machgo.PreparedStmt
-	if s, err := conn.Prepare(ctx, `
-			select code,
-				time,
-				sum(sum_price) / sum(cnt) as avg_price,
-				sum(sum_volume) as total_volume,
-				sum(sum_bid) / sum(cnt) as avg_bid,
-				sum(sum_ask) / sum(cnt) as avg_ask
-			from stock_rollup_1m
-			where code = ?
-			and time between ? and ?
-			group by code, time
-			order by time
-			limit ?`); err != nil {
-		panic(err)
-	} else {
-		stmt = s.(*machgo.PreparedStmt)
-	}
-	defer func() {
-		if err := stmt.Close(); err != nil {
-			panic(err)
-		}
-	}()
-	for j := 0; j < nCount; j++ {
-		tick := time.Now()
-		r, err := stmt.Query(ctx, q.code, q.betweenFrom, q.betweenTo, q.nFetch)
-		if err != nil {
-			fmt.Printf("Query error(2), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
-			return
-		}
-		rows := r.(*machgo.Rows)
-		n := 0
-		for rows.Next() {
-			if err := rows.Err(); err != nil {
-				panic(err)
-			}
-			n++
-			var name string
-			var t time.Time
-			var avgPrice float64
-			var totalVolume float64
-			var avgBid float64
-			var avgAsk float64
-			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
-				panic(err)
-			}
-			if name != q.code {
-				panic(fmt.Sprintf("invalid name: %s", name))
-			}
-		}
-		if err := rows.Err(); err != nil {
-			panic(err)
-		}
-		tick = time.Now()
-		if err = rows.Close(); err != nil {
-			fmt.Printf("Close error(3), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
 	}
@@ -465,10 +317,10 @@ func Bytes(v int64) string {
 	return p.Sprintf("%.1f%s", f, u)
 }
 
-func RunUnionQuery_1M_Tick(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, q Query) {
+func RunUnionQuery_1M_Tick(ctx context.Context, clientId int, conn *sql.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
-		r, err := conn.Query(ctx, `
+		rows, err := conn.QueryContext(ctx, `
 			select
 				DATE_TRUNC('minute', time) as mtime,
 				sum(sum_price) / sum(cnt) as avg_price,
@@ -498,7 +350,6 @@ func RunUnionQuery_1M_Tick(ctx context.Context, clientId int, conn *machgo.Conn,
 			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -526,10 +377,10 @@ func RunUnionQuery_1M_Tick(ctx context.Context, clientId int, conn *machgo.Conn,
 	}
 }
 
-func RunUnionQuery_1M_1S(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, q Query) {
+func RunUnionQuery_1M_1S(ctx context.Context, clientId int, conn *sql.Conn, nCount int, q Query) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
-		r, err := conn.Query(ctx, `
+		rows, err := conn.QueryContext(ctx, `
 			select
 				DATE_TRUNC('minute', time) as mtime,
 				sum(sum_price) / sum(cnt) as avg_price,
@@ -559,7 +410,6 @@ func RunUnionQuery_1M_1S(ctx context.Context, clientId int, conn *machgo.Conn, n
 			fmt.Printf("Query error(1), client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {

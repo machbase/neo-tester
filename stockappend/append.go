@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	_ "embed"
 	"flag"
 	"fmt"
@@ -15,8 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-client/machgo"
+	"github.com/machbase/neo-client/machbase"
 	"github.com/machbase/neo-server/v8/jsh/lib/pretty"
 )
 
@@ -37,27 +37,18 @@ func main() {
 	flag.BoolVar(&createTables, "create", false, "create tables and rollups")
 	flag.Parse()
 
-	db, err := machgo.NewDatabase(&machgo.Config{
-		Host:         host,
-		Port:         port,
-		MaxOpenConn:  -1,
-		MaxOpenQuery: -1,
-	})
-	if err != nil {
-		panic(err)
-	}
-	defer db.Close()
-
 	ctx := context.Background()
+
+	dsn := fmt.Sprintf("server=tcp://%s:%s@%s:%d", user, password, host, port)
 
 	// create tables if not exists
 	if createTables {
-		CreateTablesIfNotExists(ctx, db)
+		CreateTablesIfNotExists(ctx, dsn)
 	}
 
 	// start appending data
 	if appendTps > 0 {
-		stopFunc := AppendData(ctx, db, appendTps)
+		stopFunc := AppendData(ctx, dsn, appendTps)
 		defer stopFunc()
 	}
 	interruptSignal := make(chan os.Signal, 1)
@@ -70,19 +61,19 @@ func main() {
 //go:embed stock_codes.txt
 var codesTxt string
 
-func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
+func AppendData(ctx context.Context, dsn string, tps float64) func() {
 	codes := strings.Split(codesTxt, "\n")
 	interval := time.Duration(float64(time.Second) / tps)
 	gen := NewDataGenerator(codes, interval)
 
-	var conn *machgo.Conn
-	if c, err := db.Connect(ctx, api.WithPassword(user, password), api.WithIOMetrics(true)); err != nil {
+	meta := &machbase.Meta{}
+	appender := &machbase.Appender{}
+	err := appender.Connect(context.WithValue(ctx, machbase.MetaKey, meta), dsn+";io_metrics=1", "stock_tick")
+	if err != nil {
 		panic(err)
-	} else {
-		conn = c.(*machgo.Conn)
 	}
 
-	appender, err := conn.Appender(ctx, "stock_tick")
+	db, err := sql.Open("machbase", dsn)
 	if err != nil {
 		panic(err)
 	}
@@ -105,11 +96,11 @@ func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 	go func() {
 		statTicker := time.NewTicker(1 * time.Second)
 		defer statTicker.Stop()
-		var statConn *machgo.Conn
-		if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+		var statConn *sql.Conn
+		if c, err := db.Conn(ctx); err != nil {
 			panic(err)
 		} else {
-			statConn = c.(*machgo.Conn)
+			statConn = c
 			defer statConn.Close()
 		}
 
@@ -134,7 +125,7 @@ func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 				}
 			case now := <-ticker.C:
 				elapsed := now.Sub(tick).Seconds()
-				readBytes, writeBytes, _ := conn.ResetIOMetrics()
+				readBytes, writeBytes, _ := meta.IOMetrics(true)
 				tick = now
 				cnt := atomic.LoadUint64(&count)
 				tps := float64(cnt-lastCount) / elapsed
@@ -154,7 +145,7 @@ func AppendData(ctx context.Context, db *machgo.Database, tps float64) func() {
 	return func() {
 		gen.Stop()
 		appender.Close()
-		conn.Close()
+		db.Close()
 	}
 }
 
@@ -332,14 +323,20 @@ func randomizedInterval(rnd *rand.Rand, base time.Duration) time.Duration {
 	return base + time.Duration(rnd.Int63n(span)+int64(min))
 }
 
-func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
-	conn, err := db.Connect(ctx, api.WithPassword(user, password))
+func CreateTablesIfNotExists(ctx context.Context, dsn string) {
+	db, err := sql.Open("machbase", dsn)
+	if err != nil {
+		panic(err)
+	}
+	defer db.Close()
+
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		panic(err)
 	}
 	defer conn.Close()
 
-	result := conn.Exec(ctx, `create tag table if not exists stock_tick (
+	_, err = conn.ExecContext(ctx, `create tag table if not exists stock_tick (
 		code      varchar(20) primary key,
 		time      datetime basetime,
 		price     double,
@@ -347,10 +344,10 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 		bid_price double,
 		ask_price double
 	)`)
-	if result.Err() != nil {
-		panic(result.Err())
+	if err != nil {
+		panic(err)
 	}
-	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1s (
+	_, err = conn.ExecContext(ctx, `create tag table if not exists stock_rollup_1s (
 		code       varchar(20) primary key,
 		time       datetime basetime,
 		sum_price  double,
@@ -365,10 +362,10 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 		high       double,
 		low        double
 	)`)
-	if result.Err() != nil {
-		panic(result.Err())
+	if err != nil {
+		panic(err)
 	}
-	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1m (
+	_, err = conn.ExecContext(ctx, `create tag table if not exists stock_rollup_1m (
     	code       varchar(20) primary key,
 		time       datetime basetime,
 		sum_price  double,
@@ -383,10 +380,10 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 		high       double,
 		low        double
 	)`)
-	if result.Err() != nil {
-		panic(result.Err())
+	if err != nil {
+		panic(err)
 	}
-	result = conn.Exec(ctx, `create tag table if not exists stock_rollup_1h (
+	_, err = conn.ExecContext(ctx, `create tag table if not exists stock_rollup_1h (
 		code       varchar(20) primary key,
 		time       datetime basetime,
 		sum_price  double,
@@ -401,11 +398,11 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 		high       double,
 		low        double
 	)`)
-	if result.Err() != nil {
-		panic(result.Err())
+	if err != nil {
+		panic(err)
 	}
 
-	result = conn.Exec(ctx, `create rollup rollup_stock_1s
+	_, err = conn.ExecContext(ctx, `create rollup rollup_stock_1s
 		into (stock_rollup_1s)
 		as (
 			select
@@ -426,10 +423,10 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 			group by code, time
 		)
 		interval 1 sec`)
-	if result.Err() != nil {
-		panic(result.Err())
+	if err != nil {
+		panic(err)
 	}
-	result = conn.Exec(ctx, `create rollup rollup_stock_1m
+	_, err = conn.ExecContext(ctx, `create rollup rollup_stock_1m
 		into (stock_rollup_1m)
 		as (
 			select
@@ -450,10 +447,10 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 			group by code, time
 		)
 		interval 1 min`)
-	if result.Err() != nil {
-		panic(result.Err())
+	if err != nil {
+		panic(err)
 	}
-	result = conn.Exec(ctx, `create rollup rollup_stock_1h
+	_, err = conn.ExecContext(ctx, `create rollup rollup_stock_1h
 		into (stock_rollup_1h)
 		as (
 			select
@@ -474,8 +471,8 @@ func CreateTablesIfNotExists(ctx context.Context, db api.Database) {
 			group by code, time
 		)
 		interval 1 hour`)
-	if result.Err() != nil {
-		panic(result.Err())
+	if err != nil {
+		panic(err)
 	}
 }
 
@@ -485,9 +482,9 @@ type RollupStat struct {
 	Gap        uint64
 }
 
-func ShowRollupGap(ctx context.Context, statConn *machgo.Conn) ([]RollupStat, error) {
+func ShowRollupGap(ctx context.Context, statConn *sql.Conn) ([]RollupStat, error) {
 	var ret []RollupStat
-	rows, err := statConn.Query(ctx, `
+	rows, err := statConn.QueryContext(ctx, `
 		select
 			C.rollup_name, 
 			C.last_elapsed_msec as elapsed_msec,

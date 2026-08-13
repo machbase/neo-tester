@@ -2,21 +2,16 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
 
-	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-client/machgo"
+	_ "github.com/machbase/neo-client"
 )
 
 func BenchmarkConn(b *testing.B) {
-	db, err := machgo.NewDatabase(&machgo.Config{
-		Host:         "127.0.0.1",
-		Port:         5656,
-		MaxOpenConn:  -1,
-		MaxOpenQuery: -1,
-	})
+	db, err := sql.Open("machbase", "host=127.0.0.1; port=5656; user=sys; password=manager")
 	if err != nil {
 		panic(err)
 	}
@@ -24,7 +19,7 @@ func BenchmarkConn(b *testing.B) {
 
 	ctx := context.Background()
 	for i := 0; i < b.N; i++ {
-		conn, err := db.Connect(ctx, api.WithPassword("sys", "manager"))
+		conn, err := db.Conn(ctx)
 		if err != nil {
 			panic(err)
 		}
@@ -33,18 +28,13 @@ func BenchmarkConn(b *testing.B) {
 }
 
 func BenchmarkQuery(b *testing.B) {
-	db, err := machgo.NewDatabase(&machgo.Config{
-		Host:         "127.0.0.1",
-		Port:         5656,
-		MaxOpenConn:  -1,
-		MaxOpenQuery: -1,
-	})
+	db, err := sql.Open("machbase", "host=127.0.0.1; port=5656; user=sys; password=manager")
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 	ctx := context.Background()
-	conn, err := db.Connect(ctx, api.WithPassword("sys", "manager"))
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		panic(err)
 	}
@@ -52,7 +42,7 @@ func BenchmarkQuery(b *testing.B) {
 
 	tagName := "tag1"
 	for i := 0; i < b.N; i++ {
-		rows, err := conn.Query(ctx, "SELECT * FROM tag WHERE name=? LIMIT 100", tagName)
+		rows, err := conn.QueryContext(ctx, "SELECT * FROM tag WHERE name=? LIMIT 100", tagName)
 		if err != nil {
 			panic(err)
 		}

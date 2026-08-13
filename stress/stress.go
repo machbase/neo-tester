@@ -15,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/machbase/neo-client/api"
 	"github.com/tidwall/gjson"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
@@ -150,7 +149,7 @@ var scenarios = map[string]Scenario{
 			for i := 0; i < 8; i++ {
 				workers = append(workers, fmt.Sprintf("'worker-%d'", rand.Int31n(1000)))
 			}
-			return fmt.Sprintf(api.SqlTidy(`select
+			return fmt.Sprintf(`select
                     name, rollup('min', 1, time) mtime, avg(value)
                 from
                     test_table
@@ -158,7 +157,7 @@ var scenarios = map[string]Scenario{
 			        worker in (%s)
                 and nth = %d
                 and time >= TO_DATE('%s') and time <= TO_DATE('%s')
-                group by name, mtime`),
+                group by name, mtime`,
 				strings.Join(workers, ","),
 				targetNRecord,
 				ts.Add(-2*time.Minute).In(time.Local).Format("2006-01-02 15:04:05"), ts.In(time.Local).Format("2006-01-02 15:04:05"))
@@ -204,12 +203,12 @@ var scenarios = map[string]Scenario{
 				m2 := m1 % 100
 				m2s = append(m2s, fmt.Sprintf("'m2-%d'", m2))
 			}
-			return fmt.Sprintf(api.SqlTidy(`select * from test_table
+			return fmt.Sprintf(`select * from test_table
 				where
 					meta1 in (%s)
 				and meta2 in (%s)
 				order by time desc
-				limit 10`),
+				limit 10`,
 				strings.Join(m1s, ","),
 				strings.Join(m2s, ","))
 		},

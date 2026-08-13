@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"fmt"
 	"os"
@@ -10,9 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/machbase/neo-client/api"
-	"github.com/machbase/neo-client/machgo"
-	"github.com/machbase/neo-engine/v8/native"
+	_ "github.com/machbase/neo-client"
 )
 
 func main() {
@@ -42,33 +41,27 @@ func main() {
 	flag.BoolVar(&doPreparedStmt, "prep", doPreparedStmt, "use prepared statement")
 	flag.Parse()
 
-	fmt.Println("Neo Client Version:", native.Version, "Build:", native.GitHash)
-	db, err := machgo.NewDatabase(&machgo.Config{
-		Host:         host,
-		Port:         port,
-		MaxOpenConn:  -1,
-		MaxOpenQuery: -1,
-	})
+	db, err := sql.Open("machbase", fmt.Sprintf("host=%s; port=%d; user=%s; password=%s", host, port, user, password))
 	if err != nil {
 		panic(err)
 	}
 	defer db.Close()
 
 	ctx := context.Background()
-	conn, err := db.Connect(ctx, api.WithPassword(user, password))
+	conn, err := db.Conn(ctx)
 	if err != nil {
 		panic(err)
 	}
 	if doCreateData {
-		result := conn.Exec(ctx, "CREATE TAG TABLE IF NOT EXISTS tag (name varchar(80) primary key, time DATETIME basetime, value DOUBLE)")
-		if result.Err() != nil {
-			panic(result.Err())
+		_, err := conn.ExecContext(ctx, "CREATE TAG TABLE IF NOT EXISTS tag (name varchar(80) primary key, time DATETIME basetime, value DOUBLE)")
+		if err != nil {
+			panic(err)
 		}
 
 		for j := 0; j < nFetch*2; j++ {
-			result := conn.Exec(ctx, "INSERT INTO tag(name, time, value) VALUES('tag1', now, 123.45)")
-			if result.Err() != nil {
-				panic(result.Err())
+			_, err := conn.ExecContext(ctx, "INSERT INTO tag(name, time, value) VALUES('tag1', now, 123.45)")
+			if err != nil {
+				panic(err)
 			}
 		}
 	}
@@ -98,12 +91,10 @@ func main() {
 				runtime.LockOSThread()
 			}
 			<-startCh
-			var conn *machgo.Conn
 
-			if c, err := db.Connect(ctx, api.WithPassword(user, password)); err != nil {
+			conn, err := db.Conn(ctx)
+			if err != nil {
 				panic(err)
-			} else {
-				conn = c.(*machgo.Conn)
 			}
 			defer func() {
 				err := conn.Close()
@@ -146,15 +137,14 @@ func main() {
 	fmt.Printf("  Sessions: min %v, max %v, avg %v\n", minSessionElapsed, maxSessionElapsed, avgSessionElapsed)
 }
 
-func RunQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, tagName string, nFetch int) {
+func RunQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount int, tagName string, nFetch int) {
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
-		r, err := conn.Query(ctx, "SELECT * FROM tag WHERE name = ? LIMIT ?", tagName, nFetch)
+		rows, err := conn.QueryContext(ctx, "SELECT * FROM tag WHERE name = ? LIMIT ?", tagName, nFetch)
 		if err != nil {
 			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
@@ -186,12 +176,12 @@ func RunQuery(ctx context.Context, clientId int, conn *machgo.Conn, nCount int, 
 	}
 }
 
-func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount int, nFetch int) {
-	var stmt *machgo.PreparedStmt
-	if s, err := conn.Prepare(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?"); err != nil {
+func RunPreparedQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount int, nFetch int) {
+	var stmt *sql.Stmt
+	if s, err := conn.PrepareContext(ctx, "SELECT * FROM tag WHERE name='tag1' LIMIT ?"); err != nil {
 		panic(err)
 	} else {
-		stmt = s.(*machgo.PreparedStmt)
+		stmt = s
 	}
 	defer func() {
 		if err := stmt.Close(); err != nil {
@@ -200,12 +190,11 @@ func RunPreparedQuery(ctx context.Context, clientId int, conn api.Conn, nCount i
 	}()
 	for j := 0; j < nCount; j++ {
 		tick := time.Now()
-		r, err := stmt.Query(ctx, nFetch)
+		rows, err := stmt.QueryContext(ctx, nFetch)
 		if err != nil {
 			fmt.Printf("Query error, client %d, elapsed %v %s\n", clientId, time.Since(tick), err.Error())
 			return
 		}
-		rows := r.(*machgo.Rows)
 		n := 0
 		for rows.Next() {
 			if err := rows.Err(); err != nil {
