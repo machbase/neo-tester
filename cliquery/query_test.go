@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/machbase/neo-client"
+	_ "github.com/machbase/neo-client/v2"
 )
 
 func BenchmarkConn(b *testing.B) {

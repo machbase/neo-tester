@@ -16,7 +16,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/machbase/neo-client/machbase"
+	client "github.com/machbase/neo-client/v2"
 	"github.com/machbase/neo-server/v8/jsh/lib/pretty"
 )
 
@@ -66,9 +66,9 @@ func AppendData(ctx context.Context, dsn string, tps float64) func() {
 	interval := time.Duration(float64(time.Second) / tps)
 	gen := NewDataGenerator(codes, interval)
 
-	meta := &machbase.Meta{}
-	appender := &machbase.Appender{}
-	err := appender.Connect(context.WithValue(ctx, machbase.MetaKey, meta), dsn+";io_metrics=1", "stock_tick")
+	meta := &client.Meta{}
+	appender := &client.Appender{}
+	err := appender.Connect(context.WithValue(ctx, client.MetaKey, meta), dsn+";io_metrics=1", "stock_tick")
 	if err != nil {
 		panic(err)
 	}

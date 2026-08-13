@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/machbase/neo-client/machbase"
+	client "github.com/machbase/neo-client/v2"
 	"golang.org/x/text/language"
 	"golang.org/x/text/message"
 )
@@ -91,8 +91,8 @@ func main() {
 		go func(ctx context.Context, clientId int) {
 			defer wg.Done()
 			<-startCh
-			meta := &machbase.Meta{}
-			conn, err := db.Conn(context.WithValue(ctx, machbase.MetaKey, meta))
+			meta := &client.Meta{}
+			conn, err := db.Conn(context.WithValue(ctx, client.MetaKey, meta))
 			if err != nil {
 				panic(err)
 			}
