@@ -3,8 +3,8 @@ module tester
 go 1.25.12
 
 require (
-	github.com/machbase/neo-client/v2 v2.0.0-20260813042321-9d3fc396724e
-	github.com/machbase/neo-server/v8 v8.5.11-0.20260813020719-b2844838687f
+	github.com/machbase/neo-client/v2 v2.0.0-20260814014559-aa9f6f8be80f
+	github.com/machbase/neo-server/v8 v8.5.11-0.20260814024907-ff0d106b15a1
 	github.com/tidwall/gjson v1.19.0
 	golang.org/x/text v0.40.0
 )
