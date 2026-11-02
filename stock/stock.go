@@ -197,6 +197,7 @@ func RunQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount int, q Q
 				time,
 				price,
 				volume,
+				cumulative_volume,
 				bid_price,
 				ask_price
 			from stock_tick
@@ -218,9 +219,10 @@ func RunQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount int, q Q
 			var t time.Time
 			var avgPrice float64
 			var totalVolume float64
+			var cumulativeVolume float64
 			var avgBid float64
 			var avgAsk float64
-			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &cumulativeVolume, &avgBid, &avgAsk); err != nil {
 				panic(err)
 			}
 			if name != q.code {
@@ -248,7 +250,15 @@ func RunRollupQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount in
 				sum(sum_price) / sum(cnt) as avg_price,
 				sum(sum_volume) as total_volume,
 				sum(sum_bid) / sum(cnt) as avg_bid,
-				sum(sum_ask) / sum(cnt) as avg_ask
+				sum(sum_ask) / sum(cnt) as avg_ask,
+				first((open_time, open_volume), open) as open,
+				min(open_time) as open_time,
+				first((open_time, open_volume), open_volume) as open_volume,
+				last((close_time, close_volume desc), close) as close,
+				max(close_time) as close_time,
+				last((close_time, close_volume desc), close_volume) as close_volume,
+				max(high) as high,
+				min(low) as low
 			from stock_rollup_1m
 			where code = ?
 			and time between ? and ?
@@ -271,7 +281,10 @@ func RunRollupQuery(ctx context.Context, clientId int, conn *sql.Conn, nCount in
 			var totalVolume float64
 			var avgBid float64
 			var avgAsk float64
-			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+			var open, openVolume, closePrice, closeVolume, high, low float64
+			var openTime, closeTime time.Time
+			if err := rows.Scan(&name, &t, &avgPrice, &totalVolume, &avgBid, &avgAsk,
+				&open, &openTime, &openVolume, &closePrice, &closeTime, &closeVolume, &high, &low); err != nil {
 				panic(err)
 			}
 			if name != q.code {
@@ -326,7 +339,15 @@ func RunUnionQuery_1M_Tick(ctx context.Context, clientId int, conn *sql.Conn, nC
 				sum(sum_price) / sum(cnt) as avg_price,
 				sum(sum_volume) as total_volume,
 				sum(sum_bid) / sum(cnt) as avg_bid,
-				sum(sum_ask) / sum(cnt) as avg_ask
+				sum(sum_ask) / sum(cnt) as avg_ask,
+				first((open_time, open_volume), open) as open,
+				min(open_time) as open_time,
+				first((open_time, open_volume), open_volume) as open_volume,
+				last((close_time, close_volume desc), close) as close,
+				max(close_time) as close_time,
+				last((close_time, close_volume desc), close_volume) as close_volume,
+				max(high) as high,
+				min(low) as low
 			from stock_rollup_1m
 			where code = ?
 			and time >= date_trunc('minute', sysdate) - 60m
@@ -339,7 +360,15 @@ func RunUnionQuery_1M_Tick(ctx context.Context, clientId int, conn *sql.Conn, nC
 				AVG(price) as avg_price,
 				SUM(volume) as total_volume,
 				AVG(bid_price) as avg_bid,
-				AVG(ask_price) as avg_ask
+				AVG(ask_price) as avg_ask,
+				first((time, cumulative_volume), price) as open,
+				min(time) as open_time,
+				first((time, cumulative_volume), cumulative_volume) as open_volume,
+				last((time, cumulative_volume desc), price) as close,
+				max(time) as close_time,
+				last((time, cumulative_volume desc), cumulative_volume) as close_volume,
+				max(price) as high,
+				min(price) as low
 			from stock_tick
 			where code = ?
 			and time >= date_trunc('minute', sysdate) - 2m
@@ -361,7 +390,10 @@ func RunUnionQuery_1M_Tick(ctx context.Context, clientId int, conn *sql.Conn, nC
 			var totalVolume float64
 			var avgBid float64
 			var avgAsk float64
-			if err := rows.Scan(&mtime, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+			var open, openVolume, closePrice, closeVolume, high, low float64
+			var openTime, closeTime time.Time
+			if err := rows.Scan(&mtime, &avgPrice, &totalVolume, &avgBid, &avgAsk,
+				&open, &openTime, &openVolume, &closePrice, &closeTime, &closeVolume, &high, &low); err != nil {
 				panic(err)
 			}
 		}
@@ -386,7 +418,15 @@ func RunUnionQuery_1M_1S(ctx context.Context, clientId int, conn *sql.Conn, nCou
 				sum(sum_price) / sum(cnt) as avg_price,
 				sum(sum_volume) as total_volume,
 				sum(sum_bid) / sum(cnt) as avg_bid,
-				sum(sum_ask) / sum(cnt) as avg_ask
+				sum(sum_ask) / sum(cnt) as avg_ask,
+				first((open_time, open_volume), open) as open,
+				min(open_time) as open_time,
+				first((open_time, open_volume), open_volume) as open_volume,
+				last((close_time, close_volume desc), close) as close,
+				max(close_time) as close_time,
+				last((close_time, close_volume desc), close_volume) as close_volume,
+				max(high) as high,
+				min(low) as low
 			from stock_rollup_1m
 			where code = ?
 			and time >= date_trunc('minute', sysdate) - 60m
@@ -399,7 +439,15 @@ func RunUnionQuery_1M_1S(ctx context.Context, clientId int, conn *sql.Conn, nCou
 				sum(sum_price) / sum(cnt) as avg_price,
 				sum(sum_volume) as total_volume,
 				sum(sum_bid) / sum(cnt) as avg_bid,
-				sum(sum_ask) / sum(cnt) as avg_ask
+				sum(sum_ask) / sum(cnt) as avg_ask,
+				first((open_time, open_volume), open) as open,
+				min(open_time) as open_time,
+				first((open_time, open_volume), open_volume) as open_volume,
+				last((close_time, close_volume desc), close) as close,
+				max(close_time) as close_time,
+				last((close_time, close_volume desc), close_volume) as close_volume,
+				max(high) as high,
+				min(low) as low
 			from stock_rollup_1s
 			where code = ?
 			and time >= date_trunc('minute', sysdate) - 2m
@@ -421,7 +469,10 @@ func RunUnionQuery_1M_1S(ctx context.Context, clientId int, conn *sql.Conn, nCou
 			var totalVolume float64
 			var avgBid float64
 			var avgAsk float64
-			if err := rows.Scan(&mtime, &avgPrice, &totalVolume, &avgBid, &avgAsk); err != nil {
+			var open, openVolume, closePrice, closeVolume, high, low float64
+			var openTime, closeTime time.Time
+			if err := rows.Scan(&mtime, &avgPrice, &totalVolume, &avgBid, &avgAsk,
+				&open, &openTime, &openVolume, &closePrice, &closeTime, &closeVolume, &high, &low); err != nil {
 				panic(err)
 			}
 		}

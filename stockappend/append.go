@@ -84,9 +84,10 @@ func AppendData(ctx context.Context, dsn string, tps float64) func() {
 		ts := data.Timestamp
 		closeVal := data.Price
 		volVal := data.Volume
+		cumulativeVolume := data.CumulativeVolume
 		bidVal := data.BidPrice
 		askVal := data.AskPrice
-		err := appender.Append(code, ts, closeVal, volVal, bidVal, askVal)
+		err := appender.Append(code, ts, closeVal, volVal, cumulativeVolume, bidVal, askVal)
 		if err != nil {
 			panic(err)
 		}
@@ -150,12 +151,13 @@ func AppendData(ctx context.Context, dsn string, tps float64) func() {
 }
 
 type Data struct {
-	Timestamp time.Time
-	Code      string
-	Price     float64
-	Volume    float64
-	BidPrice  float64
-	AskPrice  float64
+	Timestamp        time.Time
+	Code             string
+	Price            float64
+	Volume           float64
+	CumulativeVolume float64
+	BidPrice         float64
+	AskPrice         float64
 }
 
 // DataGenerator simulates real-time stock data generation for the given stock codes at specified intervals.
@@ -204,11 +206,12 @@ func (dg *DataGenerator) Start(callback func(Data)) {
 	}
 
 	type codeState struct {
-		price      float64
-		anchor     float64
-		baseVolume float64
-		volatility float64
-		drift      float64
+		price            float64
+		anchor           float64
+		baseVolume       float64
+		cumulativeVolume float64
+		volatility       float64
+		drift            float64
 	}
 	stateByCode := make(map[string]*codeState, len(dg.Codes))
 	rnd := rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -276,6 +279,7 @@ func (dg *DataGenerator) Start(callback func(Data)) {
 				if volume < 1 {
 					volume = 1
 				}
+				state.cumulativeVolume += volume
 				spreadPct := 0.0005 + rnd.Float64()*0.0015
 				spread := price * spreadPct
 				bid := price - spread/2
@@ -287,12 +291,13 @@ func (dg *DataGenerator) Start(callback func(Data)) {
 				timestamp := timeTick.Add(time.Duration(i))
 
 				callback(Data{
-					Timestamp: timestamp,
-					Code:      code,
-					Price:     price,
-					Volume:    volume,
-					BidPrice:  bid,
-					AskPrice:  ask,
+					Timestamp:        timestamp,
+					Code:             code,
+					Price:            price,
+					Volume:           volume,
+					CumulativeVolume: state.cumulativeVolume,
+					BidPrice:         bid,
+					AskPrice:         ask,
 				})
 			}
 		}
@@ -341,6 +346,7 @@ func CreateTablesIfNotExists(ctx context.Context, dsn string) {
 		time      datetime basetime,
 		price     double,
 		volume    double,
+		cumulative_volume double,
 		bid_price double,
 		ask_price double
 	)`)
@@ -357,8 +363,10 @@ func CreateTablesIfNotExists(ctx context.Context, dsn string) {
 		cnt        integer,
 		open       double,
 		open_time  datetime,
+		open_volume double,
 		close      double,
 		close_time datetime,
+		close_volume double,
 		high       double,
 		low        double
 	)`)
@@ -375,8 +383,10 @@ func CreateTablesIfNotExists(ctx context.Context, dsn string) {
 		cnt        integer,
 		open       double,
 		open_time  datetime,
+		open_volume double,
 		close      double,
 		close_time datetime,
+		close_volume double,
 		high       double,
 		low        double
 	)`)
@@ -393,10 +403,12 @@ func CreateTablesIfNotExists(ctx context.Context, dsn string) {
 		cnt        integer,
 		open       double,
 		open_time  datetime,
+		open_volume double,
 		close      double,
 		close_time datetime,
-		high       double,
-		low        double
+		close_volume double,
+		high        double,
+		low         double
 	)`)
 	if err != nil {
 		panic(err)
@@ -413,10 +425,12 @@ func CreateTablesIfNotExists(ctx context.Context, dsn string) {
 				sum(bid_price) as sum_bid,
 				sum(ask_price) as sum_ask,
 				count(*) as cnt,
-				first(time, price) as open,
+				first((time, cumulative_volume), price) as open,
 				min(time) as open_time,
-				last(time, price) as close,
+				first((time, cumulative_volume), cumulative_volume) as open_volume,
+				last((time, cumulative_volume desc), price) as close,
 				max(time) as close_time,
+				last((time, cumulative_volume desc), cumulative_volume) as close_volume,
 				max(price) as high,
 				min(price) as low
 			from stock_tick
@@ -437,10 +451,12 @@ func CreateTablesIfNotExists(ctx context.Context, dsn string) {
 				sum(sum_bid) as sum_bid,
 				sum(sum_ask) as sum_ask,
 				sum(cnt) as cnt,
-				first(open_time, open) as open,
+				first((open_time, open_volume), open) as open,
 				min(open_time) as open_time,
-				last(close_time, close) as close,
+				first((open_time, open_volume), open_volume) as open_volume,
+				last((close_time, close_volume desc), close) as close,
 				max(close_time) as close_time,
+				last((close_time, close_volume desc), close_volume) as close_volume,
 				max(high) as high,
 				min(low) as low
 			from stock_rollup_1s
@@ -461,10 +477,12 @@ func CreateTablesIfNotExists(ctx context.Context, dsn string) {
 				sum(sum_bid) as sum_bid,
 				sum(sum_ask) as sum_ask,
 				sum(cnt) as cnt,
-				first(open_time, open) as open,
+				first((open_time, open_volume), open) as open,
 				min(open_time) as open_time,
-				last(close_time, close) as close,
+				first((open_time, open_volume), open_volume) as open_volume,
+				last((close_time, close_volume desc), close) as close,
 				max(close_time) as close_time,
+				last((close_time, close_volume desc), close_volume) as close_volume,
 				max(high) as high,
 				min(low) as low
 			from stock_rollup_1m

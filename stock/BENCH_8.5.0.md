@@ -67,6 +67,18 @@ go run ./stockappend -h 192.168.0.90 -p 35656 -tps 10000 -create
 |           |              |    128  |   10,000   | 59,412/s |   19.7s    |   21.4s    |    20.8s    |
 |           |              |    512  |   10,000   | 57,021/s |   1m25s    |   1m29s    |    1m28s    |
 
+- v8.5.13 from localhost
+
+| Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |
+|-----------|--------------|---------|------------|----------|------------|------------|-------------|
+|v8.5.13    | stock        |      1  |   10,000   |  1,085/s |    9.2s    |    9.2s    |     9.2s    |
+|           | union        |      8  |   10,000   |  5,355/s |   14.7s    |   14.9s    |    14.8s    |
+|           |   (1m, 1s)   |     16  |   10,000   |  8,082/s |   19.4s    |   19.7s    |    19.5s    |
+|           |              |     32  |   10,000   | 15,684/s |   18.1s    |   20.4s    |    19.5s    |
+|           |              |     64  |   10,000   | 19,281/s |   31.4s    |   33.1s    |    32.4s    |
+|           |              |    128  |   10,000   | 22,656/s |   51.8s    |   56.2s    |    55.3s    |
+|           |              |    512  |   10,000   | 21,625/s |   3m40s    |   3m56s    |    3m53s    |
+
 - v8.7.1 from localhost
 
 | Ver       | scenario     | clients | per client | ops/s.   | min client | max client | avg. client |

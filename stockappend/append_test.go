@@ -57,6 +57,38 @@ func TestDataGeneratorGeneratesData(t *testing.T) {
 	dg.Stop()
 }
 
+func TestDataGeneratorCumulativeVolumePerCode(t *testing.T) {
+	codes := []string{"AAA", "BBB"}
+	dg := NewDataGenerator(codes, 5*time.Millisecond)
+	ch := make(chan Data, 100)
+	go dg.Start(func(d Data) {
+		ch <- d
+	})
+	defer dg.Stop()
+
+	cumulativeByCode := make(map[string]float64, len(codes))
+	seenCodes := make(map[string]bool, len(codes))
+	for count := 0; count < 20; count++ {
+		select {
+		case d := <-ch:
+			expected := cumulativeByCode[d.Code] + d.Volume
+			if d.CumulativeVolume != expected {
+				t.Fatalf("unexpected cumulative volume for %s: got=%v want=%v", d.Code, d.CumulativeVolume, expected)
+			}
+			cumulativeByCode[d.Code] = d.CumulativeVolume
+			seenCodes[d.Code] = true
+		case <-time.After(300 * time.Millisecond):
+			t.Fatal("timed out waiting for generated data")
+		}
+	}
+
+	for _, code := range codes {
+		if !seenCodes[code] {
+			t.Errorf("no data generated for code %s", code)
+		}
+	}
+}
+
 func TestDataGeneratorBatchGeneration(t *testing.T) {
 	// Test that short intervals generate multiple data points per tick
 	codes := []string{"AAA"}
